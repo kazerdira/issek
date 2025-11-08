@@ -30,9 +30,27 @@ class Database:
         """Create database indexes for better performance"""
         db = cls.get_db()
         
-        # Users indexes
-        await db.users.create_index("phone_number", unique=True, sparse=True)
-        await db.users.create_index("email", unique=True, sparse=True)
+        # Drop existing indexes to recreate them properly
+        try:
+            await db.users.drop_index("phone_number_1")
+        except:
+            pass
+        try:
+            await db.users.drop_index("email_1")
+        except:
+            pass
+        
+        # Users indexes - partialFilterExpression ensures unique only when field exists
+        await db.users.create_index(
+            "phone_number", 
+            unique=True, 
+            partialFilterExpression={"phone_number": {"$type": "string"}}
+        )
+        await db.users.create_index(
+            "email", 
+            unique=True,
+            partialFilterExpression={"email": {"$type": "string"}}
+        )
         await db.users.create_index("username", unique=True)
         await db.users.create_index("google_id", sparse=True)
         
