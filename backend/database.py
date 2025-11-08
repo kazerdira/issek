@@ -3,6 +3,7 @@ from typing import Optional
 import os
 from datetime import datetime, timedelta
 import logging
+from utils import utc_now
 
 logger = logging.getLogger(__name__)
 
