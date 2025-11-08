@@ -138,7 +138,7 @@ async def create_message(message_data: dict):
                     "sender_id": message_data["sender_id"],
                     "message_type": message_data["message_type"]
                 },
-                "updated_at": datetime.utcnow()
+                "updated_at": utc_now()
             }
         }
     )
