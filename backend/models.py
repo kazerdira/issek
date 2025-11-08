@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
+from utils import utc_now
 
 class UserRole(str, Enum):
     REGULAR = "regular"
