@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from datetime import datetime, timedelta
 import uuid
 import logging
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from models import (
     UserCreate, UserLogin, UserResponse, Token,
@@ -18,6 +20,9 @@ from database import (
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 logger = logging.getLogger(__name__)
+
+# Rate limiter
+limiter = Limiter(key_func=get_remote_address)
 
 @router.post("/register", response_model=Token)
 async def register(user_data: UserCreate):
