@@ -11,9 +11,20 @@ import random
 from database import get_user_by_id, get_user_by_phone, get_user_by_email
 
 # Security
-SECRET_KEY = os.environ.get('SECRET_KEY', secrets.token_urlsafe(32))
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    # Generate a persistent key for development only
+    import logging
+    logger = logging.getLogger(__name__)
+    SECRET_KEY = secrets.token_urlsafe(32)
+    logger.warning("SECRET_KEY not set in environment. Using temporary key. This will invalidate tokens on restart!")
+    logger.warning("For production, set SECRET_KEY environment variable.")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 days
+
+# Development mode flag for OTP exposure
+DEV_MODE = os.environ.get('DEV_MODE', 'true').lower() == 'true'
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
