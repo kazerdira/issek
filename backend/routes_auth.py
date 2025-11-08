@@ -17,6 +17,7 @@ from database import (
     Database, get_user_by_phone, get_user_by_email,
     get_user_by_username, create_user, update_user
 )
+from utils import utc_now
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 logger = logging.getLogger(__name__)
