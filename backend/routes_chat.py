@@ -55,8 +55,8 @@ async def create_new_chat(
         'id': chat_id,
         'created_by': current_user['id'],
         'admins': [current_user['id']],
-        'created_at': datetime.utcnow(),
-        'updated_at': datetime.utcnow(),
+        'created_at': utc_now(),
+        'updated_at': utc_now(),
         'pinned_messages': [],
         'muted_by': []
     })
@@ -273,8 +273,8 @@ async def send_message(
         'reactions': {},
         'edited': False,
         'deleted': False,
-        'created_at': datetime.utcnow(),
-        'updated_at': datetime.utcnow()
+        'created_at': utc_now(),
+        'updated_at': utc_now()
     })
     
     await create_message(message_dict)

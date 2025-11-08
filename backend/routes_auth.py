@@ -64,8 +64,8 @@ async def register(user_data: UserCreate):
     
     user_dict.update({
         'id': user_id,
-        'created_at': datetime.utcnow(),
-        'updated_at': datetime.utcnow(),
+        'created_at': utc_now(),
+        'updated_at': utc_now(),
         'is_online': True,
         'contacts': [],
         'blocked_users': []
@@ -86,7 +86,7 @@ async def register(user_data: UserCreate):
         avatar=user_data.avatar,
         role=user_data.role,
         is_online=True,
-        created_at=datetime.utcnow()
+        created_at=utc_now()
     )
     
     return Token(access_token=access_token, user=user_response)
@@ -117,7 +117,7 @@ async def login(request: Request, login_data: UserLogin):
         )
     
     # Update user status
-    await update_user(user['id'], {'is_online': True, 'last_seen': datetime.utcnow()})
+    await update_user(user['id'], {'is_online': True, 'last_seen': utc_now()})
     
     # Create access token
     access_token = create_access_token(data={"sub": user['id']})
@@ -151,8 +151,8 @@ async def request_otp(request: Request, otp_request: OTPRequest):
     otp_data = {
         'phone_number': otp_request.phone_number,
         'otp': otp_code,
-        'created_at': datetime.utcnow(),
-        'expires_at': datetime.utcnow() + timedelta(minutes=10),
+        'created_at': utc_now(),
+        'expires_at': utc_now() + timedelta(minutes=10),
         'verified': False
     }
     
@@ -193,7 +193,7 @@ async def verify_otp(otp_verify: OTPVerify):
         )
     
     # Check if OTP expired
-    if otp_record['expires_at'] < datetime.utcnow():
+    if otp_record['expires_at'] < utc_now():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="OTP expired"
@@ -218,8 +218,8 @@ async def verify_otp(otp_verify: OTPVerify):
             'phone_number': otp_verify.phone_number,
             'username': username,
             'display_name': username,
-            'created_at': datetime.utcnow(),
-            'updated_at': datetime.utcnow(),
+            'created_at': utc_now(),
+            'updated_at': utc_now(),
             'is_online': True,
             'role': 'regular',
             'contacts': [],
@@ -230,7 +230,7 @@ async def verify_otp(otp_verify: OTPVerify):
         user = user_dict
     else:
         # Update existing user
-        await update_user(user['id'], {'is_online': True, 'last_seen': datetime.utcnow()})
+        await update_user(user['id'], {'is_online': True, 'last_seen': utc_now()})
     
     # Create access token
     access_token = create_access_token(data={"sub": user['id']})

@@ -53,7 +53,7 @@ class SocketManager:
                     from database import update_user
                     await update_user(user_id, {
                         'is_online': False,
-                        'last_seen': datetime.utcnow()
+                        'last_seen': utc_now()
                     })
                     
                     # Notify contacts
@@ -75,7 +75,7 @@ class SocketManager:
                 
                 # Update user status
                 from database import update_user
-                await update_user(user_id, {'is_online': True, 'last_seen': datetime.utcnow()})
+                await update_user(user_id, {'is_online': True, 'last_seen': utc_now()})
                 
                 logger.info(f"User {user_id} authenticated with session {sid}")
                 await self.sio.emit('authenticated', {'user_id': user_id}, room=sid)
