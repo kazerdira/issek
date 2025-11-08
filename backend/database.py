@@ -99,7 +99,7 @@ async def create_user(user_data: dict):
 
 async def update_user(user_id: str, update_data: dict):
     db = Database.get_db()
-    update_data['updated_at'] = datetime.utcnow()
+    update_data['updated_at'] = utc_now()
     await db.users.update_one({"id": user_id}, {"$set": update_data})
 
 async def get_chat_by_id(chat_id: str):
