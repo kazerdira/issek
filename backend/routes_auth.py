@@ -156,13 +156,16 @@ async def request_otp(otp_request: OTPRequest):
     await db.otps.insert_one(otp_data)
     
     # In production, send OTP via SMS (Twilio, etc.)
-    # For now, return it in response (ONLY FOR DEVELOPMENT)
     logger.info(f"OTP for {otp_request.phone_number}: {otp_code}")
     
-    return {
-        "message": "OTP sent successfully",
-        "otp": otp_code  # Remove this in production!
-    }
+    # Only expose OTP in development mode
+    from auth import DEV_MODE
+    response = {"message": "OTP sent successfully"}
+    if DEV_MODE:
+        response["otp"] = otp_code
+        logger.warning("DEV_MODE: Exposing OTP in API response")
+    
+    return response
 
 @router.post("/verify-otp", response_model=Token)
 async def verify_otp(otp_verify: OTPVerify):
