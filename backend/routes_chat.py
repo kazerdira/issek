@@ -15,6 +15,7 @@ from database import (
     update_message, get_user_by_id
 )
 from socket_manager import socket_manager
+from utils import utc_now
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
 logger = logging.getLogger(__name__)
