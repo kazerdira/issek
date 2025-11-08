@@ -1,6 +1,9 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import os
 import logging
 from pathlib import Path
@@ -21,12 +24,16 @@ from database import Database
 from socket_manager import socket_manager
 
 # Import routes
-from routes_auth import router as auth_router
+from routes_auth import router as auth_router, limiter as auth_limiter
 from routes_chat import router as chat_router
 from routes_users import router as users_router
 
 # Create the main app
 app = FastAPI(title="ChatApp API", version="1.0.0")
+
+# Add rate limiter state and exception handler
+app.state.limiter = auth_limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
