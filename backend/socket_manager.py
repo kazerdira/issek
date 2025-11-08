@@ -62,11 +62,32 @@ class SocketManager:
         
         @self.sio.event
         async def authenticate(sid, data):
-            """Authenticate user and register connection"""
+            """Authenticate user with JWT token and register connection"""
             try:
-                user_id = data.get('user_id')
-                if not user_id:
-                    await self.sio.emit('error', {'message': 'Invalid user_id'}, room=sid)
+                token = data.get('token')
+                if not token:
+                    await self.sio.emit('authentication_error', {'message': 'Missing authentication token'}, room=sid)
+                    return
+                
+                # Validate JWT token
+                from jose import jwt, JWTError
+                from auth import SECRET_KEY, ALGORITHM
+                from database import get_user_by_id
+                
+                try:
+                    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                    user_id: str = payload.get("sub")
+                    if user_id is None:
+                        await self.sio.emit('authentication_error', {'message': 'Invalid token'}, room=sid)
+                        return
+                except JWTError:
+                    await self.sio.emit('authentication_error', {'message': 'Invalid token'}, room=sid)
+                    return
+                
+                # Verify user exists
+                user = await get_user_by_id(user_id)
+                if not user:
+                    await self.sio.emit('authentication_error', {'message': 'User not found'}, room=sid)
                     return
                 
                 # Register connection
@@ -78,14 +99,110 @@ class SocketManager:
                 from database import update_user
                 await update_user(user_id, {'is_online': True, 'last_seen': utc_now()})
                 
-                logger.info(f"User {user_id} authenticated with session {sid}")
-                await self.sio.emit('authenticated', {'user_id': user_id}, room=sid)
+                logger.info(f"User {user_id} ({user['username']}) authenticated with session {sid}")
+                await self.sio.emit('authenticated', {
+                    'user_id': user_id,
+                    'username': user['username'],
+                    'display_name': user['display_name']
+                }, room=sid)
                 
                 # Notify contacts
                 await self.broadcast_user_status(user_id, True)
                 
             except Exception as e:
                 logger.error(f"Authentication error: {e}")
+                await self.sio.emit('authentication_error', {'message': str(e)}, room=sid)
+        
+        @self.sio.event
+        async def join_room(sid, data):
+            """User joins a room (simplified version for testing)"""
+            try:
+                room_id = data.get('room_id')
+                if not room_id:
+                    await self.sio.emit('error', {'message': 'Missing room_id'}, room=sid)
+                    return
+                
+                # Find user_id from authenticated connections
+                user_id = None
+                for uid, sids in self.user_connections.items():
+                    if sid in sids:
+                        user_id = uid
+                        break
+                
+                if not user_id:
+                    await self.sio.emit('error', {'message': 'User not authenticated'}, room=sid)
+                    return
+                
+                # Join Socket.IO room
+                await self.sio.enter_room(sid, room_id)
+                
+                logger.info(f"User {user_id} joined room {room_id}")
+                await self.sio.emit('room_joined', {
+                    'room_id': room_id,
+                    'user_id': user_id
+                }, room=sid)
+                
+                # Notify others in room
+                await self.sio.emit('user_joined_room', {
+                    'user_id': user_id,
+                    'room_id': room_id
+                }, room=room_id, skip_sid=sid)
+                
+            except Exception as e:
+                logger.error(f"Join room error: {e}")
+                await self.sio.emit('error', {'message': str(e)}, room=sid)
+        
+        @self.sio.event
+        async def send_message(sid, data):
+            """Send a message to a room"""
+            try:
+                room_id = data.get('room_id')
+                content = data.get('content')
+                message_type = data.get('message_type', 'text')
+                
+                if not room_id or not content:
+                    await self.sio.emit('error', {'message': 'Missing room_id or content'}, room=sid)
+                    return
+                
+                # Find user_id from authenticated connections
+                user_id = None
+                for uid, sids in self.user_connections.items():
+                    if sid in sids:
+                        user_id = uid
+                        break
+                
+                if not user_id:
+                    await self.sio.emit('error', {'message': 'User not authenticated'}, room=sid)
+                    return
+                
+                # Get user info
+                from database import get_user_by_id
+                user = await get_user_by_id(user_id)
+                if not user:
+                    await self.sio.emit('error', {'message': 'User not found'}, room=sid)
+                    return
+                
+                # Create message data
+                message_data = {
+                    'id': f"msg_{utc_now().timestamp()}",
+                    'room_id': room_id,
+                    'content': content,
+                    'message_type': message_type,
+                    'sender': {
+                        'id': user_id,
+                        'username': user['username'],
+                        'display_name': user['display_name']
+                    },
+                    'timestamp': utc_now().isoformat()
+                }
+                
+                # Send to all users in room
+                await self.sio.emit('new_message', message_data, room=room_id)
+                
+                logger.info(f"Message sent by {user_id} to room {room_id}")
+                
+            except Exception as e:
+                logger.error(f"Send message error: {e}")
                 await self.sio.emit('error', {'message': str(e)}, room=sid)
         
         @self.sio.event
