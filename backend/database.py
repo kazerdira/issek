@@ -146,7 +146,7 @@ async def create_message(message_data: dict):
 
 async def update_message(message_id: str, update_data: dict):
     db = Database.get_db()
-    update_data['updated_at'] = datetime.utcnow()
+    update_data['updated_at'] = utc_now()
     await db.messages.update_one({"id": message_id}, {"$set": update_data})
 
 async def get_message_by_id(message_id: str):
