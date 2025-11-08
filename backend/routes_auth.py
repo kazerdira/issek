@@ -139,7 +139,8 @@ async def login(request: Request, login_data: UserLogin):
     return Token(access_token=access_token, user=user_response)
 
 @router.post("/request-otp")
-async def request_otp(otp_request: OTPRequest):
+@limiter.limit("3/hour")
+async def request_otp(request: Request, otp_request: OTPRequest):
     """Request OTP for phone number verification"""
     db = Database.get_db()
     
