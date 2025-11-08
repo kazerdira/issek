@@ -1,0 +1,136 @@
+from motor.motor_asyncio import AsyncIOMotorClient
+from typing import Optional
+import os
+from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
+
+class Database:
+    client: Optional[AsyncIOMotorClient] = None
+    db = None
+
+    @classmethod
+    def get_db(cls):
+        if cls.db is None:
+            mongo_url = os.environ['MONGO_URL']
+            cls.client = AsyncIOMotorClient(mongo_url)
+            cls.db = cls.client[os.environ.get('DB_NAME', 'chatapp')]
+            logger.info("Database connection established")
+        return cls.db
+
+    @classmethod
+    async def close_db(cls):
+        if cls.client:
+            cls.client.close()
+            logger.info("Database connection closed")
+
+    @classmethod
+    async def create_indexes(cls):
+        """Create database indexes for better performance"""
+        db = cls.get_db()
+        
+        # Users indexes
+        await db.users.create_index("phone_number", unique=True, sparse=True)
+        await db.users.create_index("email", unique=True, sparse=True)
+        await db.users.create_index("username", unique=True)
+        await db.users.create_index("google_id", sparse=True)
+        
+        # Messages indexes
+        await db.messages.create_index("chat_id")
+        await db.messages.create_index("sender_id")
+        await db.messages.create_index([("chat_id", 1), ("created_at", -1)])
+        await db.messages.create_index("scheduled_at", sparse=True)
+        
+        # Chats indexes
+        await db.chats.create_index("participants")
+        await db.chats.create_index("created_by")
+        
+        # OTP indexes
+        await db.otps.create_index("phone_number")
+        await db.otps.create_index("created_at", expireAfterSeconds=600)  # Auto-delete after 10 minutes
+        
+        logger.info("Database indexes created successfully")
+
+# Helper functions
+async def get_user_by_phone(phone_number: str):
+    db = Database.get_db()
+    user = await db.users.find_one({"phone_number": phone_number})
+    return user
+
+async def get_user_by_email(email: str):
+    db = Database.get_db()
+    user = await db.users.find_one({"email": email})
+    return user
+
+async def get_user_by_id(user_id: str):
+    db = Database.get_db()
+    user = await db.users.find_one({"id": user_id})
+    return user
+
+async def get_user_by_username(username: str):
+    db = Database.get_db()
+    user = await db.users.find_one({"username": username})
+    return user
+
+async def create_user(user_data: dict):
+    db = Database.get_db()
+    result = await db.users.insert_one(user_data)
+    return result.inserted_id
+
+async def update_user(user_id: str, update_data: dict):
+    db = Database.get_db()
+    update_data['updated_at'] = datetime.utcnow()
+    await db.users.update_one({"id": user_id}, {"$set": update_data})
+
+async def get_chat_by_id(chat_id: str):
+    db = Database.get_db()
+    chat = await db.chats.find_one({"id": chat_id})
+    return chat
+
+async def get_user_chats(user_id: str):
+    db = Database.get_db()
+    chats = await db.chats.find({"participants": user_id}).sort("updated_at", -1).to_list(1000)
+    return chats
+
+async def create_chat(chat_data: dict):
+    db = Database.get_db()
+    result = await db.chats.insert_one(chat_data)
+    return result.inserted_id
+
+async def get_chat_messages(chat_id: str, limit: int = 50, skip: int = 0):
+    db = Database.get_db()
+    messages = await db.messages.find(
+        {"chat_id": chat_id, "deleted": False}
+    ).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    return list(reversed(messages))  # Return in chronological order
+
+async def create_message(message_data: dict):
+    db = Database.get_db()
+    result = await db.messages.insert_one(message_data)
+    # Update chat's last_message
+    await db.chats.update_one(
+        {"id": message_data["chat_id"]},
+        {
+            "$set": {
+                "last_message": {
+                    "content": message_data.get("content", ""),
+                    "created_at": message_data["created_at"],
+                    "sender_id": message_data["sender_id"],
+                    "message_type": message_data["message_type"]
+                },
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+    return result.inserted_id
+
+async def update_message(message_id: str, update_data: dict):
+    db = Database.get_db()
+    update_data['updated_at'] = datetime.utcnow()
+    await db.messages.update_one({"id": message_id}, {"$set": update_data})
+
+async def get_message_by_id(message_id: str):
+    db = Database.get_db()
+    message = await db.messages.find_one({"id": message_id})
+    return message
