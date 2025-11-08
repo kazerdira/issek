@@ -92,12 +92,22 @@ async def get_chats(current_user: dict = Depends(get_current_user)):
     """Get all chats for current user"""
     chats = await get_user_chats(current_user['id'])
     
+    # Collect all unique participant IDs
+    all_participant_ids = set()
+    for chat in chats:
+        all_participant_ids.update(chat['participants'])
+    
+    # Batch fetch all users
+    db = Database.get_db()
+    users_list = await db.users.find({"id": {"$in": list(all_participant_ids)}}).to_list(None)
+    users_map = {user['id']: user for user in users_list}
+    
     result = []
     for chat in chats:
-        # Get participant details
+        # Get participant details from the map
         participants_details = []
         for participant_id in chat['participants']:
-            user = await get_user_by_id(participant_id)
+            user = users_map.get(participant_id)
             if user:
                 participants_details.append(UserResponse(
                     id=user['id'],
