@@ -92,7 +92,8 @@ async def register(user_data: UserCreate):
     return Token(access_token=access_token, user=user_response)
 
 @router.post("/login", response_model=Token)
-async def login(login_data: UserLogin):
+@limiter.limit("5/minute")
+async def login(request: Request, login_data: UserLogin):
     """Login with phone/email and password"""
     if not login_data.phone_number and not login_data.email:
         raise HTTPException(
