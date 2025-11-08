@@ -9,6 +9,7 @@ import secrets
 import random
 
 from database import get_user_by_id, get_user_by_phone, get_user_by_email
+from utils import utc_now
 
 # Security
 SECRET_KEY = os.environ.get('SECRET_KEY')
