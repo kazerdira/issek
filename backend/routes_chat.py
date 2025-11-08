@@ -207,10 +207,16 @@ async def get_messages(
     
     messages = await get_chat_messages(chat_id, limit, skip)
     
+    # Batch fetch all unique senders
+    sender_ids = list(set(msg['sender_id'] for msg in messages))
+    db = Database.get_db()
+    senders_list = await db.users.find({"id": {"$in": sender_ids}}).to_list(None)
+    senders_map = {user['id']: user for user in senders_list}
+    
     # Add sender details to each message
     result = []
     for msg in messages:
-        sender = await get_user_by_id(msg['sender_id'])
+        sender = senders_map.get(msg['sender_id'])
         sender_response = None
         if sender:
             sender_response = UserResponse(
