@@ -1,0 +1,46 @@
+diff --git a/backend/models.py b/backend/models.py
+index 248b065..3d54335 100644
+--- a/backend/models.py
++++ b/backend/models.py
+@@ -57,8 +57,8 @@ class User(UserBase):
+     last_seen: Optional[datetime] = None
+     contacts: List[str] = []  # user IDs
+     blocked_users: List[str] = []
+-    created_at: datetime = Field(default_factory=datetime.utcnow)
+-    updated_at: datetime = Field(default_factory=datetime.utcnow)
++    created_at: datetime = Field(default_factory=utc_now)
++    updated_at: datetime = Field(default_factory=utc_now)
+     google_id: Optional[str] = None
+ 
+ # OTP Models
+@@ -72,7 +72,7 @@ class OTPVerify(BaseModel):
+ class OTP(BaseModel):
+     phone_number: str
+     otp: str
+-    created_at: datetime = Field(default_factory=datetime.utcnow)
++    created_at: datetime = Field(default_factory=utc_now)
+     expires_at: datetime
+     verified: bool = False
+ 
+@@ -102,8 +102,8 @@ class Message(MessageBase):
+     reactions: Dict[str, List[str]] = {}  # {emoji: [user_ids]}
+     edited: bool = False
+     deleted: bool = False
+-    created_at: datetime = Field(default_factory=datetime.utcnow)
+-    updated_at: datetime = Field(default_factory=datetime.utcnow)
++    created_at: datetime = Field(default_factory=utc_now)
++    updated_at: datetime = Field(default_factory=utc_now)
+ 
+ class MessageResponse(Message):
+     sender: Optional[UserResponse] = None
+@@ -134,8 +134,8 @@ class Chat(ChatBase):
+     admins: List[str] = []  # for groups
+     pinned_messages: List[str] = []  # message IDs
+     muted_by: List[str] = []  # user IDs
+-    created_at: datetime = Field(default_factory=datetime.utcnow)
+-    updated_at: datetime = Field(default_factory=datetime.utcnow)
++    created_at: datetime = Field(default_factory=utc_now)
++    updated_at: datetime = Field(default_factory=utc_now)
+     last_message: Optional[Dict[str, Any]] = None
+ 
+ class ChatResponse(Chat):
