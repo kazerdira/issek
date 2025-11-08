@@ -68,6 +68,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add SlowAPI middleware for rate limiting
+app.add_middleware(SlowAPIMiddleware)
+
 # Mount Socket.IO
 socket_app = socketio.ASGIApp(
     socket_manager.sio,
