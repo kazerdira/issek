@@ -39,6 +39,13 @@ export default function ProfileScreen() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
+        <View style={styles.headerTop}>
+          <View style={styles.placeholder} />
+          <TouchableOpacity style={styles.logoutIconButton} onPress={handleLogout}>
+            <Ionicons name="power" size={24} color={colors.textLight} />
+          </TouchableOpacity>
+        </View>
+        
         <View style={styles.avatarContainer}>
           <Avatar
             uri={user?.avatar}
@@ -100,11 +107,6 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Ionicons name="log-out-outline" size={24} color={colors.error} />
-        <Text style={styles.logoutText}>Logout</Text>
-      </TouchableOpacity>
-
       <Text style={styles.version}>ChatApp v1.0.0</Text>
     </ScrollView>
   );
@@ -120,8 +122,33 @@ const styles = StyleSheet.create({
     paddingVertical: 32,
     backgroundColor: colors.primary,
   },
+  headerTop: {
+    position: 'absolute',
+    top: 16,
+    right: 0,
+    left: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    zIndex: 1,
+  },
+  placeholder: {
+    width: 44,
+  },
+  logoutIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
   avatarContainer: {
     marginBottom: 16,
+    marginTop: 40,
   },
   displayName: {
     fontSize: 24,
@@ -180,23 +207,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginLeft: 12,
     flex: 1,
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    marginTop: 16,
-    marginHorizontal: 20,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.error,
-  },
-  logoutText: {
-    fontSize: 16,
-    color: colors.error,
-    fontWeight: '600',
-    marginLeft: 8,
   },
   version: {
     textAlign: 'center',
