@@ -37,24 +37,27 @@ class SocketManager:
             logger.info(f"Client disconnected: {sid}")
             # Remove user from all tracking
             user_id = None
-            for uid, sids in self.user_connections.items():
+            # Iterate over a copy to avoid modification during iteration
+            for uid, sids in list(self.user_connections.items()):
                 if sid in sids:
                     user_id = uid
                     sids.remove(sid)
+                    # Remove the user entirely if no more connections
                     if not sids:
-                        del self.user_connections[uid]
+                        self.user_connections.pop(uid, None)
                     break
             
             if user_id:
-                # Update user status
-                from database import update_user
-                await update_user(user_id, {
-                    'is_online': False,
-                    'last_seen': datetime.utcnow()
-                })
-                
-                # Notify contacts
-                await self.broadcast_user_status(user_id, False)
+                # Update user status only if no other connections exist
+                if user_id not in self.user_connections:
+                    from database import update_user
+                    await update_user(user_id, {
+                        'is_online': False,
+                        'last_seen': datetime.utcnow()
+                    })
+                    
+                    # Notify contacts
+                    await self.broadcast_user_status(user_id, False)
         
         @self.sio.event
         async def authenticate(sid, data):
