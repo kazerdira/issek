@@ -255,7 +255,7 @@ export default function ChatScreen() {
       const response = await chatsAPI.sendMessage(chatId, {
         chat_id: chatId,
         sender_id: user.id,
-        content: asset.fileName || 'Media',
+        content: '',  // Send empty string for media-only messages
         message_type: messageType,
         media_url: mediaUrl,
       });
@@ -431,7 +431,10 @@ export default function ChatScreen() {
       item.content === 'Media' || 
       item.content.startsWith('data:') ||
       item.content.startsWith('http://') ||
-      item.content.startsWith('https://')
+      item.content.startsWith('https://') ||
+      // Check if content looks like a filename (has extension or is very short)
+      /\.(jpg|jpeg|png|gif|webp|mp4|mov|avi|pdf|doc|docx)$/i.test(item.content) ||
+      item.content.length < 50  // Short text likely a filename, not a caption
     );
 
     return (
@@ -449,8 +452,8 @@ export default function ChatScreen() {
         {!showAvatar && !isMe && <View style={{ width: 32 }} />}
         
         <View style={[
-          styles.messageBubble, 
-          isMe ? styles.messageBubbleMe : styles.messageBubbleOther,
+          styles.messageBubble,
+          !isMediaOnly && (isMe ? styles.messageBubbleMe : styles.messageBubbleOther),
           isMediaOnly && styles.mediaBubble
         ]}>
           {!isMe && showAvatar && !isMediaOnly && (
@@ -743,7 +746,9 @@ const styles = StyleSheet.create({
   mediaBubble: {
     backgroundColor: 'transparent',
     padding: 0,
+    margin: 0,
     maxWidth: '80%',
+    borderRadius: 0,
   },
   senderName: {
     fontSize: 12,
@@ -752,10 +757,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   messageImage: {
-    width: 200,
-    height: 200,
+    width: 220,
+    height: 220,
     borderRadius: 12,
-    marginBottom: 4,
+    marginBottom: 0,
   },
   mediaMessageFooter: {
     position: 'absolute',
