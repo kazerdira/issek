@@ -30,7 +30,7 @@ export default function ChatScreen() {
   const { id } = useLocalSearchParams();
   const chatId = typeof id === 'string' ? id : id[0];
   
-  const { currentChat, setCurrentChat, messages, setMessages, addMessage, typingUsers } = useChatStore();
+  const { currentChat, setCurrentChat, messages, setMessages, addMessage } = useChatStore();
   const { user } = useAuthStore();
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -40,7 +40,6 @@ export default function ChatScreen() {
   const [showReactions, setShowReactions] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const sendingRef = useRef(false); // Synchronous lock to prevent race conditions
 
   // Subscribe to messages for this chat
   const chatMessages = messages[chatId] || [];
@@ -62,11 +61,6 @@ export default function ChatScreen() {
       if (user) {
         socketService.leaveChat(chatId, user.id);
         socketService.sendTyping(chatId, user.id, false);
-      }
-      // Clear typing timeout to prevent memory leaks
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = null;
       }
     };
   }, [chatId, user]);
@@ -124,17 +118,13 @@ export default function ChatScreen() {
   };
 
   const handleSend = async () => {
-    // Check ref FIRST (synchronous) to prevent race conditions
-    if (!inputText.trim() || !user || sending || sendingRef.current) return;
-    
-    // Set BOTH locks immediately
-    sendingRef.current = true;
-    setSending(true);
+    if (!inputText.trim() || !user) return;
 
     const messageText = inputText.trim();
     setInputText('');
     const replyToId = replyTo?.id;
     setReplyTo(null);
+    setSending(true);
 
     // Stop typing indicator
     socketService.sendTyping(chatId, user.id, false);
@@ -169,8 +159,6 @@ export default function ChatScreen() {
       // Restore the text if send failed
       setInputText(messageText);
     } finally {
-      // Release BOTH locks
-      sendingRef.current = false;
       setSending(false);
     }
   };
@@ -219,11 +207,8 @@ export default function ChatScreen() {
   };
 
   const sendMediaMessage = async (asset: any) => {
-    // Check ref FIRST (synchronous) to prevent race conditions
-    if (!user || sending || sendingRef.current) return;
-    
-    // Set BOTH locks immediately
-    sendingRef.current = true;
+    if (!user) return;
+
     setSending(true);
     try {
       const messageType = asset.type === 'video' ? 'video' : 'image';
@@ -243,8 +228,6 @@ export default function ChatScreen() {
       console.error('Error sending media:', error);
       Alert.alert('Error', 'Failed to send media');
     } finally {
-      // Release BOTH locks
-      sendingRef.current = false;
       setSending(false);
     }
   };
@@ -331,20 +314,6 @@ export default function ChatScreen() {
     if (!currentChat || currentChat.chat_type === 'group') return false;
     const otherUser = currentChat.participant_details?.find((p) => p.id !== user?.id);
     return otherUser?.is_online || false;
-  };
-
-  const getTypingStatus = () => {
-    const typingInChat = typingUsers[chatId] || [];
-    // Filter out current user (don't show yourself typing)
-    const othersTyping = typingInChat.filter(id => id !== user?.id);
-    
-    if (othersTyping.length === 0) return null;
-    
-    if (currentChat?.chat_type === 'group') {
-      return othersTyping.length === 1 ? '1 person typing...' : `${othersTyping.length} people typing...`;
-    }
-    
-    return 'typing...';
   };
 
   const renderReplyPreview = () => {
@@ -486,7 +455,7 @@ export default function ChatScreen() {
           <View style={styles.headerText}>
             <Text style={styles.headerTitle}>{getChatName()}</Text>
             <Text style={styles.headerSubtitle}>
-              {getTypingStatus() || (getChatOnlineStatus() ? 'Online' : 'Offline')}
+              {getChatOnlineStatus() ? 'Online' : 'Offline'}
             </Text>
           </View>
         </TouchableOpacity>

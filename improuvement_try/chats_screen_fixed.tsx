@@ -36,8 +36,9 @@ export default function ChatsScreen() {
       };
 
       if (Platform.OS === 'android') {
-        const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-        return () => subscription.remove();
+        BackHandler.addEventListener('hardwareBackPress', onBackPress);
+        return () =>
+          BackHandler.removeEventListener('hardwareBackPress', onBackPress);
       }
     }, [])
   );

@@ -319,8 +319,9 @@ async def send_message(
                 'created_at': reply_msg['created_at'].isoformat() if isinstance(reply_msg['created_at'], datetime) else reply_msg['created_at']
             }
     
-    # Broadcast message via Socket.IO
-    await socket_manager.send_message_to_chat(chat_id, response.dict())
+    # Broadcast message via Socket.IO - serialize datetime objects to ISO strings
+    message_data_json = response.model_dump(mode='json')
+    await socket_manager.send_message_to_chat(chat_id, message_data_json)
     
     return response
 
@@ -668,8 +669,9 @@ async def forward_messages(
         response = MessageResponse(**message_dict)
         response.sender = sender_response
         
-        # Broadcast forwarded message
-        await socket_manager.send_message_to_chat(chat_id, response.dict())
+        # Broadcast forwarded message - serialize datetime objects to ISO strings
+        message_data_json = response.model_dump(mode='json')
+        await socket_manager.send_message_to_chat(chat_id, message_data_json)
     
     # Broadcast forward event summary
     if forwarded_messages:

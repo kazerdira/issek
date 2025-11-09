@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
-  Platform,
-  BackHandler,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useChatStore, Chat } from '../../src/store/chatStore';
 import { chatsAPI } from '../../src/services/api';
 import { Avatar } from '../../src/components/Avatar';
@@ -26,39 +24,10 @@ export default function ChatsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Handle Android back button
-  useFocusEffect(
-    useCallback(() => {
-      const onBackPress = () => {
-        // Return true to prevent default back behavior (exit app)
-        // Return false to allow default back behavior
-        return true; // Stay on this screen
-      };
-
-      if (Platform.OS === 'android') {
-        const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-        return () => subscription.remove();
-      }
-    }, [])
-  );
-
-  // Reload chats when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      console.log('Chats screen focused, reloading chats');
-      loadChats();
-    }, [])
-  );
-
-  useEffect(() => {
-    loadChats();
-  }, []);
-
   const loadChats = async () => {
     try {
       const response = await chatsAPI.getChats();
       setChats(response.data);
-      console.log(`Loaded ${response.data.length} chats`);
     } catch (error) {
       console.error('Error loading chats:', error);
     } finally {
@@ -67,14 +36,13 @@ export default function ChatsScreen() {
     }
   };
 
+  useEffect(() => {
+    loadChats();
+  }, []);
+
   const handleRefresh = () => {
     setRefreshing(true);
     loadChats();
-  };
-
-  const handleChatPress = (chatId: string) => {
-    console.log('Navigating to chat:', chatId);
-    router.push(`/chat/${chatId}`);
   };
 
   const getChatName = (chat: Chat) => {
@@ -108,8 +76,7 @@ export default function ChatsScreen() {
     return (
       <TouchableOpacity
         style={styles.chatItem}
-        onPress={() => handleChatPress(item.id)}
-        activeOpacity={0.7}
+        onPress={() => router.push(`/chat/${item.id}`)}
       >
         <Avatar
           uri={getChatAvatar(item)}
@@ -177,7 +144,6 @@ export default function ChatsScreen() {
       <TouchableOpacity
         style={styles.fab}
         onPress={() => router.push('/(tabs)/contacts')}
-        activeOpacity={0.8}
       >
         <Ionicons name="create" size={24} color={colors.textLight} />
       </TouchableOpacity>
