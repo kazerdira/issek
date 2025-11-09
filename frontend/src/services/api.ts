@@ -70,12 +70,22 @@ export const chatsAPI = {
     api.get(`/chats/${chatId}/messages?limit=${limit}&skip=${skip}`),
   sendMessage: (chatId: string, data: any) => api.post(`/chats/${chatId}/messages`, data),
   editMessage: (messageId: string, content: string) => 
-    api.put(`/chats/messages/${messageId}`, { content }),
-  deleteMessage: (messageId: string, forEveryone = false) => 
-    api.delete(`/chats/messages/${messageId}?for_everyone=${forEveryone}`),
+    api.put(`/chats/messages/${messageId}?content=${encodeURIComponent(content)}`),
+  deleteMessage: (messageId: string) => 
+    api.delete(`/chats/messages/${messageId}`),
   addReaction: (messageId: string, emoji: string) => 
-    api.post(`/chats/messages/${messageId}/react`, { message_id: messageId, emoji }),
+    api.post(`/chats/messages/${messageId}/react`, { emoji }),
   removeReaction: (messageId: string, emoji: string) => 
-    api.delete(`/chats/messages/${messageId}/react`, { data: { message_id: messageId, emoji } }),
+    api.delete(`/chats/messages/${messageId}/react?emoji=${encodeURIComponent(emoji)}`),
+  pinMessage: (messageId: string) => 
+    api.post(`/chats/messages/${messageId}/pin`),
+  unpinMessage: (messageId: string) => 
+    api.delete(`/chats/messages/${messageId}/pin`),
+  forwardMessages: (chatId: string, fromChatId: string, messageIds: string[]) => {
+    const params = new URLSearchParams();
+    params.append('from_chat_id', fromChatId);
+    messageIds.forEach(id => params.append('message_ids', id));
+    return api.post(`/chats/${chatId}/forward?${params.toString()}`);
+  },
   markAsRead: (messageId: string) => api.post(`/chats/messages/${messageId}/read`),
 };

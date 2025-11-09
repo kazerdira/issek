@@ -54,6 +54,12 @@ Pygments==2.19.2
 PyJWT==2.10.1
 pymongo==4.5.0
 pytest==8.4.2
+pytest-asyncio==0.25.2
+pytest-cov==6.0.0
+pytest-mock==3.14.0
+httpx==0.28.1
+faker==34.2.0
+factory-boy==3.3.1
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.1
 python-engineio==4.12.3

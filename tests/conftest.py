@@ -9,12 +9,9 @@ import sys
 import os
 from unittest.mock import AsyncMock, MagicMock
 
-# Add the parent directory to Python path to import our modules
+# Add the parent directory and backend to Python path to import our modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
-from backend.database import Database
-from backend.auth import AuthManager
-from backend.models import User, Message, ChatRoom
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
 
 @pytest.fixture(scope="session")
@@ -50,12 +47,13 @@ def mock_database():
     return db
 
 
-@pytest.fixture
-def auth_manager(mock_database):
-    """Create AuthManager instance with mocked database."""
-    auth = AuthManager()
-    auth.db = mock_database
-    return auth
+# Legacy fixture - deprecated
+# @pytest.fixture
+# def auth_manager(mock_database):
+#     """Create AuthManager instance with mocked database."""
+#     auth = AuthManager()
+#     auth.db = mock_database
+#     return auth
 
 
 @pytest.fixture
@@ -254,3 +252,124 @@ def assert_api_response(response, expected_status, expected_keys=None):
         json_data = response.json()
         for key in expected_keys:
             assert key in json_data, f"Expected key '{key}' in response"
+
+
+# ============= Additional test fixtures =============
+
+# Set test environment variables
+os.environ['DEV_MODE'] = 'true'
+os.environ['SECRET_KEY'] = 'test-secret-key-for-testing-only'
+os.environ['MONGO_URL'] = os.environ.get('MONGO_URL', 'mongodb://localhost:27017/')
+os.environ['DB_NAME'] = 'chatapp_test'
+
+
+@pytest.fixture
+async def real_test_db():
+    """Setup and teardown real test database for integration tests"""
+    from backend.database import Database
+    
+    db = Database.get_db()
+    
+    # Clear test collections before test
+    await db.users.delete_many({})
+    await db.chats.delete_many({})
+    await db.messages.delete_many({})
+    await db.otps.delete_many({})
+    
+    yield db
+    
+    # Cleanup after tests
+    await db.users.delete_many({})
+    await db.chats.delete_many({})
+    await db.messages.delete_many({})
+    await db.otps.delete_many({})
+
+
+@pytest.fixture
+async def test_client():
+    """Create async test client for API testing"""
+    from httpx import AsyncClient
+    from backend.server import app
+    
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        yield client
+
+
+@pytest.fixture
+async def test_user(real_test_db):
+    """Create a test user and return user data with token"""
+    from backend.auth import create_access_token, get_password_hash
+    from backend.database import create_user
+    from backend.utils import utc_now
+    import uuid
+    
+    user_id = str(uuid.uuid4())
+    user_dict = {
+        'id': user_id,
+        'username': 'testuser',
+        'display_name': 'Test User',
+        'email': 'test@example.com',
+        'phone_number': '+1234567890',
+        'hashed_password': get_password_hash('password123'),
+        'created_at': utc_now(),
+        'updated_at': utc_now(),
+        'is_online': True,
+        'contacts': [],
+        'blocked_users': [],
+        'role': 'regular'
+    }
+    
+    await create_user(user_dict)
+    token = create_access_token(data={"sub": user_id})
+    
+    return {
+        'user_id': user_id,
+        'token': token,
+        'user_dict': user_dict
+    }
+
+
+@pytest.fixture
+async def auth_headers(test_user):
+    """Get auth headers with test token"""
+    return {"Authorization": f"Bearer {test_user['token']}"}
+
+
+@pytest.fixture
+async def test_user_2(real_test_db):
+    """Create a second test user and return user data with token"""
+    from backend.auth import create_access_token, get_password_hash
+    from backend.database import create_user
+    from backend.utils import utc_now
+    import uuid
+    
+    user_id = str(uuid.uuid4())
+    user_dict = {
+        'id': user_id,
+        'username': 'testuser2',
+        'display_name': 'Test User 2',
+        'email': 'test2@example.com',
+        'phone_number': '+1234567891',
+        'hashed_password': get_password_hash('password123'),
+        'created_at': utc_now(),
+        'updated_at': utc_now(),
+        'is_online': True,
+        'contacts': [],
+        'blocked_users': [],
+        'role': 'regular'
+    }
+    
+    await create_user(user_dict)
+    token = create_access_token(data={"sub": user_id})
+    
+    return {
+        'user_id': user_id,
+        'token': token,
+        'user_dict': user_dict
+    }
+
+
+@pytest.fixture
+async def auth_headers_2(test_user_2):
+    """Get auth headers for second test user"""
+    return {"Authorization": f"Bearer {test_user_2['token']}"}

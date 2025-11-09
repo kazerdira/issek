@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import List, Optional
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import logging
 
 from models import (
@@ -27,7 +27,6 @@ async def create_new_chat(
 ):
     """Create a new chat (direct or group)"""
     
-    # Validate participants
     if current_user['id'] not in chat_data.participants:
         chat_data.participants.append(current_user['id'])
     
@@ -37,7 +36,6 @@ async def create_new_chat(
             detail="Direct chat must have exactly 2 participants"
         )
     
-    # Check if direct chat already exists
     if chat_data.chat_type == ChatType.DIRECT:
         db = Database.get_db()
         existing_chat = await db.chats.find_one({
@@ -46,10 +44,8 @@ async def create_new_chat(
         })
         
         if existing_chat:
-            # Return existing chat
             return ChatResponse(**existing_chat)
     
-    # Create new chat
     chat_id = str(uuid.uuid4())
     chat_dict = chat_data.dict()
     chat_dict.update({
@@ -64,7 +60,6 @@ async def create_new_chat(
     
     await create_chat(chat_dict)
     
-    # Get participant details
     participants_details = []
     for participant_id in chat_data.participants:
         user = await get_user_by_id(participant_id)
@@ -93,19 +88,16 @@ async def get_chats(current_user: dict = Depends(get_current_user)):
     """Get all chats for current user"""
     chats = await get_user_chats(current_user['id'])
     
-    # Collect all unique participant IDs
     all_participant_ids = set()
     for chat in chats:
         all_participant_ids.update(chat['participants'])
     
-    # Batch fetch all users
     db = Database.get_db()
     users_list = await db.users.find({"id": {"$in": list(all_participant_ids)}}).to_list(None)
     users_map = {user['id']: user for user in users_list}
     
     result = []
     for chat in chats:
-        # Get participant details from the map
         participants_details = []
         for participant_id in chat['participants']:
             user = users_map.get(participant_id)
@@ -124,8 +116,6 @@ async def get_chats(current_user: dict = Depends(get_current_user)):
                     created_at=user['created_at']
                 ))
         
-        # Count unread messages
-        db = Database.get_db()
         unread_count = await db.messages.count_documents({
             'chat_id': chat['id'],
             'sender_id': {'$ne': current_user['id']},
@@ -160,7 +150,6 @@ async def get_chat(
             detail="Not a participant of this chat"
         )
     
-    # Get participant details
     participants_details = []
     for participant_id in chat['participants']:
         user = await get_user_by_id(participant_id)
@@ -208,13 +197,18 @@ async def get_messages(
     
     messages = await get_chat_messages(chat_id, limit, skip)
     
-    # Batch fetch all unique senders
     sender_ids = list(set(msg['sender_id'] for msg in messages))
     db = Database.get_db()
     senders_list = await db.users.find({"id": {"$in": sender_ids}}).to_list(None)
     senders_map = {user['id']: user for user in senders_list}
     
-    # Add sender details to each message
+    # Get reply_to messages if they exist
+    reply_ids = [msg.get('reply_to') for msg in messages if msg.get('reply_to')]
+    reply_messages = {}
+    if reply_ids:
+        reply_msgs = await db.messages.find({"id": {"$in": reply_ids}}).to_list(None)
+        reply_messages = {msg['id']: msg for msg in reply_msgs}
+    
     result = []
     for msg in messages:
         sender = senders_map.get(msg['sender_id'])
@@ -236,6 +230,11 @@ async def get_messages(
         
         msg_response = MessageResponse(**msg)
         msg_response.sender = sender_response
+        
+        # Add replied message info
+        if msg.get('reply_to') and msg['reply_to'] in reply_messages:
+            msg_response.reply_to_message = reply_messages[msg['reply_to']]
+        
         result.append(msg_response)
     
     return result
@@ -261,7 +260,7 @@ async def send_message(
             detail="Not a participant of this chat"
         )
     
-    # Validate reply_to message exists and belongs to this chat
+    # Validate reply_to message exists
     if message_data.reply_to:
         reply_msg = await get_message_by_id(message_data.reply_to)
         if not reply_msg or reply_msg['chat_id'] != chat_id:
@@ -270,7 +269,6 @@ async def send_message(
                 detail="Invalid reply_to message"
             )
     
-    # Create message
     message_id = str(uuid.uuid4())
     message_dict = message_data.dict()
     message_dict.update({
@@ -279,7 +277,7 @@ async def send_message(
         'chat_id': chat_id,
         'status': 'sent',
         'delivered_to': [],
-        'read_by': [current_user['id']],  # Mark as read by sender
+        'read_by': [current_user['id']],
         'reactions': {},
         'edited': False,
         'deleted': False,
@@ -289,7 +287,6 @@ async def send_message(
     
     await create_message(message_dict)
     
-    # Get sender details
     sender = await get_user_by_id(current_user['id'])
     sender_response = UserResponse(
         id=sender['id'],
@@ -308,18 +305,6 @@ async def send_message(
     response = MessageResponse(**message_dict)
     response.sender = sender_response
     
-    # Add reply_to_message context if replying
-    if message_dict.get('reply_to'):
-        reply_msg = await get_message_by_id(message_dict['reply_to'])
-        if reply_msg:
-            response.reply_to_message = {
-                'id': reply_msg['id'],
-                'content': reply_msg['content'],
-                'sender_id': reply_msg['sender_id'],
-                'created_at': reply_msg['created_at'].isoformat() if isinstance(reply_msg['created_at'], datetime) else reply_msg['created_at']
-            }
-    
-    # Broadcast message via Socket.IO
     await socket_manager.send_message_to_chat(chat_id, response.dict())
     
     return response
@@ -330,7 +315,7 @@ async def edit_message(
     content: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Edit a message (within 48 hours)"""
+    """Edit a message"""
     message = await get_message_by_id(message_id)
     
     if not message:
@@ -345,26 +330,24 @@ async def edit_message(
             detail="Can only edit your own messages"
         )
     
-    # Check if message is not too old (48 hours)
-    # Ensure created_at is timezone-aware for comparison
-    created_at = message['created_at']
-    if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
-    message_age = utc_now() - created_at
+    # Check if message is not too old (e.g., 48 hours)
+    message_age = utc_now() - message['created_at']
     if message_age > timedelta(hours=48):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Message is too old to edit (48-hour limit)"
+            detail="Message is too old to edit"
         )
     
     await update_message(message_id, {
         'content': content,
-        'edited': True,
-        'updated_at': utc_now()
+        'edited': True
     })
     
-    # Broadcast update via Socket.IO
-    await socket_manager.broadcast_message_edited(message['chat_id'], message_id, content)
+    await socket_manager.send_message_to_chat(message['chat_id'], {
+        'event': 'message_edited',
+        'message_id': message_id,
+        'content': content
+    })
     
     return {"message": "Message updated"}
 
@@ -390,11 +373,12 @@ async def delete_message(
         )
     
     if for_everyone:
-        # Delete for everyone
         await update_message(message_id, {'deleted': True, 'content': 'This message was deleted'})
         
-        # Broadcast deletion
-        await socket_manager.broadcast_message_deleted(message['chat_id'], message_id)
+        await socket_manager.send_message_to_chat(message['chat_id'], {
+            'event': 'message_deleted',
+            'message_id': message_id
+        })
     
     return {"message": "Message deleted"}
 
@@ -413,7 +397,6 @@ async def add_reaction(
             detail="Message not found"
         )
     
-    # Update reactions
     reactions = message.get('reactions', {})
     emoji = reaction_data.emoji
     
@@ -425,7 +408,6 @@ async def add_reaction(
     
     await update_message(message_id, {'reactions': reactions})
     
-    # Broadcast reaction
     await socket_manager.broadcast_reaction(message['chat_id'], {
         'message_id': message_id,
         'emoji': emoji,
@@ -438,7 +420,7 @@ async def add_reaction(
 @router.delete("/messages/{message_id}/react")
 async def remove_reaction(
     message_id: str,
-    emoji: str = Query(...),
+    reaction_data: ReactionRemove,
     current_user: dict = Depends(get_current_user)
 ):
     """Remove reaction from a message"""
@@ -450,8 +432,8 @@ async def remove_reaction(
             detail="Message not found"
         )
     
-    # Update reactions
     reactions = message.get('reactions', {})
+    emoji = reaction_data.emoji
     
     if emoji in reactions and current_user['id'] in reactions[emoji]:
         reactions[emoji].remove(current_user['id'])
@@ -460,7 +442,6 @@ async def remove_reaction(
     
     await update_message(message_id, {'reactions': reactions})
     
-    # Broadcast reaction removal
     await socket_manager.broadcast_reaction(message['chat_id'], {
         'message_id': message_id,
         'emoji': emoji,
@@ -484,13 +465,11 @@ async def mark_as_read(
             detail="Message not found"
         )
     
-    # Update read status
     read_by = message.get('read_by', [])
     if current_user['id'] not in read_by:
         read_by.append(current_user['id'])
         await update_message(message_id, {'read_by': read_by, 'status': 'read'})
         
-        # Broadcast read status
         await socket_manager.update_message_status(
             message['chat_id'],
             message_id,
@@ -505,7 +484,7 @@ async def pin_message(
     message_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Pin a message in chat (admin only)"""
+    """Pin a message in chat"""
     message = await get_message_by_id(message_id)
     
     if not message:
@@ -523,7 +502,6 @@ async def pin_message(
             detail="Only admins can pin messages"
         )
     
-    # Add message to pinned list
     pinned = chat.get('pinned_messages', [])
     if message_id not in pinned:
         pinned.append(message_id)
@@ -531,14 +509,7 @@ async def pin_message(
         db = Database.get_db()
         await db.chats.update_one(
             {"id": message['chat_id']},
-            {"$set": {"pinned_messages": pinned, "updated_at": utc_now()}}
-        )
-        
-        # Broadcast pin event
-        await socket_manager.broadcast_message_pinned(
-            message['chat_id'], 
-            message_id, 
-            current_user['id']
+            {"$set": {"pinned_messages": pinned}}
         )
     
     return {"message": "Message pinned"}
@@ -548,7 +519,7 @@ async def unpin_message(
     message_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Unpin a message from chat (admin only)"""
+    """Unpin a message from chat"""
     message = await get_message_by_id(message_id)
     
     if not message:
@@ -559,14 +530,12 @@ async def unpin_message(
     
     chat = await get_chat_by_id(message['chat_id'])
     
-    # Check if user is admin
     if current_user['id'] not in chat.get('admins', []):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can unpin messages"
         )
     
-    # Remove message from pinned list
     pinned = chat.get('pinned_messages', [])
     if message_id in pinned:
         pinned.remove(message_id)
@@ -574,14 +543,7 @@ async def unpin_message(
         db = Database.get_db()
         await db.chats.update_one(
             {"id": message['chat_id']},
-            {"$set": {"pinned_messages": pinned, "updated_at": utc_now()}}
-        )
-        
-        # Broadcast unpin event
-        await socket_manager.broadcast_message_unpinned(
-            message['chat_id'], 
-            message_id, 
-            current_user['id']
+            {"$set": {"pinned_messages": pinned}}
         )
     
     return {"message": "Message unpinned"}
@@ -589,11 +551,11 @@ async def unpin_message(
 @router.post("/{chat_id}/forward")
 async def forward_messages(
     chat_id: str,
-    message_ids: List[str] = Query(...),
-    from_chat_id: str = Query(...),
+    message_ids: List[str],
+    from_chat_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Forward one or more messages to another chat"""
+    """Forward messages to another chat"""
     # Verify target chat
     target_chat = await get_chat_by_id(chat_id)
     if not target_chat:
@@ -617,6 +579,7 @@ async def forward_messages(
         )
     
     # Forward each message
+    db = Database.get_db()
     forwarded_messages = []
     
     for msg_id in message_ids:
@@ -635,7 +598,6 @@ async def forward_messages(
             'forwarded_from': msg_id,
             'media_url': original_msg.get('media_url'),
             'file_name': original_msg.get('file_name'),
-            'file_size': original_msg.get('file_size'),
             'status': 'sent',
             'delivered_to': [],
             'read_by': [current_user['id']],
@@ -649,37 +611,6 @@ async def forward_messages(
         await create_message(message_dict)
         forwarded_messages.append(new_msg_id)
         
-        # Get sender info for response
-        sender = await get_user_by_id(current_user['id'])
-        sender_response = UserResponse(
-            id=sender['id'],
-            username=sender['username'],
-            display_name=sender['display_name'],
-            avatar=sender.get('avatar'),
-            bio=sender.get('bio'),
-            phone_number=sender.get('phone_number'),
-            email=sender.get('email'),
-            role=sender.get('role', 'regular'),
-            is_online=sender.get('is_online', False),
-            last_seen=sender.get('last_seen'),
-            created_at=sender['created_at']
-        )
-        
-        response = MessageResponse(**message_dict)
-        response.sender = sender_response
-        
-        # Broadcast forwarded message
-        await socket_manager.send_message_to_chat(chat_id, response.dict())
+        await socket_manager.send_message_to_chat(chat_id, message_dict)
     
-    # Broadcast forward event summary
-    if forwarded_messages:
-        await socket_manager.broadcast_messages_forwarded(
-            chat_id,
-            forwarded_messages,
-            current_user['id']
-        )
-    
-    return {
-        "message": f"Forwarded {len(forwarded_messages)} messages",
-        "forwarded_ids": forwarded_messages
-    }
+    return {"message": f"Forwarded {len(forwarded_messages)} messages"}

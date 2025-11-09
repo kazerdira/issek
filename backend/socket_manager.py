@@ -343,6 +343,61 @@ class SocketManager:
             await self.sio.emit('message_reaction', reaction_data, room=chat_id)
         except Exception as e:
             logger.error(f"Error broadcasting reaction: {e}")
+    
+    async def broadcast_message_edited(self, chat_id: str, message_id: str, content: str):
+        """Broadcast message edit to chat"""
+        try:
+            await self.sio.emit('message_edited', {
+                'message_id': message_id,
+                'content': content
+            }, room=chat_id)
+            logger.info(f"Message edit broadcasted to chat {chat_id}")
+        except Exception as e:
+            logger.error(f"Error broadcasting message edit: {e}")
+    
+    async def broadcast_message_deleted(self, chat_id: str, message_id: str):
+        """Broadcast message deletion to chat"""
+        try:
+            await self.sio.emit('message_deleted', {
+                'message_id': message_id
+            }, room=chat_id)
+            logger.info(f"Message deletion broadcasted to chat {chat_id}")
+        except Exception as e:
+            logger.error(f"Error broadcasting message deletion: {e}")
+    
+    async def broadcast_message_pinned(self, chat_id: str, message_id: str, pinned_by: str):
+        """Broadcast message pin to chat"""
+        try:
+            await self.sio.emit('message_pinned', {
+                'message_id': message_id,
+                'pinned_by': pinned_by
+            }, room=chat_id)
+            logger.info(f"Message pin broadcasted to chat {chat_id}")
+        except Exception as e:
+            logger.error(f"Error broadcasting message pin: {e}")
+    
+    async def broadcast_message_unpinned(self, chat_id: str, message_id: str, unpinned_by: str):
+        """Broadcast message unpin to chat"""
+        try:
+            await self.sio.emit('message_unpinned', {
+                'message_id': message_id,
+                'unpinned_by': unpinned_by
+            }, room=chat_id)
+            logger.info(f"Message unpin broadcasted to chat {chat_id}")
+        except Exception as e:
+            logger.error(f"Error broadcasting message unpin: {e}")
+    
+    async def broadcast_messages_forwarded(self, chat_id: str, message_ids: list, forwarded_by: str):
+        """Broadcast message forward to chat"""
+        try:
+            await self.sio.emit('messages_forwarded', {
+                'message_ids': message_ids,
+                'forwarded_by': forwarded_by,
+                'chat_id': chat_id
+            }, room=chat_id)
+            logger.info(f"Messages forwarded to chat {chat_id}")
+        except Exception as e:
+            logger.error(f"Error broadcasting messages forward: {e}")
 
 # Global socket manager instance
 socket_manager = SocketManager()

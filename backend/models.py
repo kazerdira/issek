@@ -91,8 +91,18 @@ class MessageBase(BaseModel):
     scheduled_at: Optional[datetime] = None
     delete_at: Optional[datetime] = None  # for disappearing messages
 
-class MessageCreate(MessageBase):
-    pass
+class MessageCreate(BaseModel):
+    """Model for creating a message - chat_id and sender_id are extracted from path and auth"""
+    content: str
+    message_type: MessageType = MessageType.TEXT
+    reply_to: Optional[str] = None  # message ID
+    forwarded_from: Optional[str] = None  # message ID
+    media_url: Optional[str] = None  # base64 for images/videos
+    file_name: Optional[str] = None
+    file_size: Optional[int] = None
+    duration: Optional[int] = None  # for voice/video messages
+    scheduled_at: Optional[datetime] = None
+    delete_at: Optional[datetime] = None  # for disappearing messages
 
 class Message(MessageBase):
     id: str
@@ -107,14 +117,13 @@ class Message(MessageBase):
 
 class MessageResponse(Message):
     sender: Optional[UserResponse] = None
+    reply_to_message: Optional[Dict[str, Any]] = None  # The message being replied to
 
 # Reaction Models
 class ReactionCreate(BaseModel):
-    message_id: str
     emoji: str
 
 class ReactionRemove(BaseModel):
-    message_id: str
     emoji: str
 
 # Chat Models

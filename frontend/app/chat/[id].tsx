@@ -8,29 +8,33 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useChatStore, Message } from '../../src/store/chatStore';
 import { useAuthStore } from '../../src/store/authStore';
 import { chatsAPI } from '../../src/services/api';
 import { socketService } from '../../src/services/socket';
-import { Avatar } from '../../src/components/Avatar';
+import { MessageBubble, TypingIndicator, ChatHeader, LoadingSpinner } from '../../src/components';
 import { colors } from '../../src/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
-import { format } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 
 export default function ChatScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const chatId = typeof id === 'string' ? id : id[0];
   
-  const { currentChat, setCurrentChat, messages, setMessages, addMessage } = useChatStore();
+  const { currentChat, setCurrentChat, messages, setMessages, addMessage, updateMessage, removeMessage } = useChatStore();
   const { user } = useAuthStore();
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [replyTo, setReplyTo] = useState<{ id: string; content: string; sender_name: string } | null>(null);
+  const [editingMessage, setEditingMessage] = useState<{ id: string; content: string } | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadChat();
@@ -71,18 +75,33 @@ export default function ChatScreen() {
     if (!inputText.trim() || !user) return;
 
     const messageText = inputText.trim();
+
+    // Handle editing
+    if (editingMessage) {
+      await handleEditMessage(editingMessage.id, messageText);
+      return;
+    }
+
     setInputText('');
     setSending(true);
 
     try {
-      const response = await chatsAPI.sendMessage(chatId, {
+      const messageData: any = {
         chat_id: chatId,
         sender_id: user.id,
         content: messageText,
         message_type: 'text',
-      });
+      };
+
+      // Add reply_to if replying
+      if (replyTo) {
+        messageData.reply_to = replyTo.id;
+      }
+
+      const response = await chatsAPI.sendMessage(chatId, messageData);
 
       addMessage(chatId, response.data);
+      setReplyTo(null); // Clear reply
       flatListRef.current?.scrollToEnd({ animated: true });
     } catch (error) {
       console.error('Error sending message:', error);
@@ -90,6 +109,89 @@ export default function ChatScreen() {
     } finally {
       setSending(false);
     }
+  };
+
+  const handleReply = (messageId: string, content: string) => {
+    const message = messages[chatId]?.find(m => m.id === messageId);
+    if (message) {
+      setReplyTo({
+        id: messageId,
+        content,
+        sender_name: message.sender?.display_name || 'User',
+      });
+    }
+  };
+
+  const handleEdit = (messageId: string, content: string) => {
+    setEditingMessage({ id: messageId, content });
+    setInputText(content);
+  };
+
+  const handleEditMessage = async (messageId: string, newContent: string) => {
+    try {
+      await chatsAPI.editMessage(messageId, newContent);
+      setEditingMessage(null);
+      setInputText('');
+      // Update will come through socket
+    } catch (error) {
+      console.error('Error editing message:', error);
+      Alert.alert('Error', 'Failed to edit message');
+    }
+  };
+
+  const handleDelete = async (messageId: string) => {
+    Alert.alert(
+      'Delete Message',
+      'Are you sure you want to delete this message?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await chatsAPI.deleteMessage(messageId);
+              // Removal will come through socket
+            } catch (error) {
+              console.error('Error deleting message:', error);
+              Alert.alert('Error', 'Failed to delete message');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleForward = (messageId: string) => {
+    // TODO: Implement forward flow - show chat selector
+    Alert.alert('Forward', 'Forward feature coming soon!');
+  };
+
+  const handleReact = async (messageId: string, emoji: string) => {
+    try {
+      await chatsAPI.addReaction(messageId, emoji);
+      // Update will come through socket
+    } catch (error) {
+      console.error('Error adding reaction:', error);
+    }
+  };
+
+  const handleRemoveReaction = async (messageId: string, emoji: string) => {
+    try {
+      await chatsAPI.removeReaction(messageId, emoji);
+      // Update will come through socket
+    } catch (error) {
+      console.error('Error removing reaction:', error);
+    }
+  };
+
+  const cancelReply = () => {
+    setReplyTo(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingMessage(null);
+    setInputText('');
   };
 
   const getChatName = () => {
@@ -116,51 +218,42 @@ export default function ChatScreen() {
     return otherUser?.is_online || false;
   };
 
-  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
-    const isMe = item.sender_id === user?.id;
-    const showAvatar = !isMe && (index === 0 || messages[chatId]?.[index - 1]?.sender_id !== item.sender_id);
-    const messageTime = format(new Date(item.created_at), 'HH:mm');
-
+  const renderMessage = ({ item }: { item: Message }) => {
+    const isOwn = item.sender_id === user?.id;
+    
     return (
-      <View style={[styles.messageContainer, isMe ? styles.messageContainerMe : styles.messageContainerOther]}>
-        {showAvatar && !isMe && (
-          <Avatar
-            uri={item.sender?.avatar}
-            name={item.sender?.display_name || 'User'}
-            size={32}
-          />
-        )}
-        {!showAvatar && !isMe && <View style={{ width: 32 }} />}
-        
-        <View style={[styles.messageBubble, isMe ? styles.messageBubbleMe : styles.messageBubbleOther]}>
-          {!isMe && showAvatar && (
-            <Text style={styles.senderName}>{item.sender?.display_name}</Text>
-          )}
-          <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther]}>
-            {item.content}
-          </Text>
-          <View style={styles.messageFooter}>
-            <Text style={[styles.messageTime, isMe ? styles.messageTimeMe : styles.messageTimeOther]}>
-              {messageTime}
-            </Text>
-            {isMe && (
-              <Ionicons
-                name={item.status === 'read' ? 'checkmark-done' : 'checkmark'}
-                size={14}
-                color={item.status === 'read' ? colors.primary : colors.textLight}
-                style={{ marginLeft: 4 }}
-              />
-            )}
-          </View>
-        </View>
-      </View>
+      <MessageBubble
+        id={item.id}
+        content={item.content}
+        sender_id={item.sender_id}
+        sender_name={item.sender?.display_name || 'User'}
+        created_at={item.created_at}
+        edited={item.edited}
+        isOwn={isOwn}
+        reactions={item.reactions}
+        reply_to_message={item.reply_to_message}
+        onReply={handleReply}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onForward={handleForward}
+        onReact={handleReact}
+        onRemoveReaction={handleRemoveReaction}
+        currentUserId={user?.id}
+      />
     );
+  };
+
+  const getLastSeen = () => {
+    if (!currentChat || currentChat.chat_type === 'group') return undefined;
+    const otherUser = currentChat.participant_details?.find((p) => p.id !== user?.id);
+    if (!otherUser?.last_seen) return undefined;
+    return formatDistanceToNow(new Date(otherUser.last_seen), { addSuffix: true });
   };
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <LoadingSpinner size={50} />
       </View>
     );
   }
@@ -172,33 +265,16 @@ export default function ChatScreen() {
       keyboardVerticalOffset={90}
     >
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={colors.textLight} />
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.headerCenter}>
-          <Avatar
-            uri={getChatAvatar()}
-            name={getChatName()}
-            size={40}
-            online={getChatOnlineStatus()}
-          />
-          <View style={styles.headerText}>
-            <Text style={styles.headerTitle}>{getChatName()}</Text>
-            <Text style={styles.headerSubtitle}>
-              {getChatOnlineStatus() ? 'Online' : 'Offline'}
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.headerButton}>
-          <Ionicons name="call" size={20} color={colors.textLight} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.headerButton}>
-          <Ionicons name="ellipsis-vertical" size={20} color={colors.textLight} />
-        </TouchableOpacity>
-      </View>
+      <ChatHeader
+        name={getChatName()}
+        avatar={getChatAvatar()}
+        isOnline={getChatOnlineStatus()}
+        lastSeen={getLastSeen()}
+        isGroup={currentChat?.chat_type === 'group'}
+        participantCount={currentChat?.participants?.length}
+        onBack={() => router.back()}
+        onInfo={() => {/* TODO: Navigate to chat info */}}
+      />
 
       {/* Messages */}
       <FlatList
@@ -216,7 +292,39 @@ export default function ChatScreen() {
             <Text style={styles.emptySubtext}>Start the conversation</Text>
           </View>
         }
+        ListFooterComponent={
+          typingUsers.length > 0 ? (
+            <TypingIndicator users={typingUsers} />
+          ) : null
+        }
       />
+
+      {/* Reply/Edit Bar */}
+      {(replyTo || editingMessage) && (
+        <View style={styles.actionBar}>
+          <View style={styles.actionBarContent}>
+            <Ionicons
+              name={editingMessage ? 'create-outline' : 'arrow-undo'}
+              size={20}
+              color={colors.primary}
+            />
+            <View style={styles.actionBarText}>
+              <Text style={styles.actionBarTitle}>
+                {editingMessage ? 'Edit Message' : `Reply to ${replyTo?.sender_name}`}
+              </Text>
+              <Text style={styles.actionBarSubtitle} numberOfLines={1}>
+                {editingMessage ? editingMessage.content : replyTo?.content}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={editingMessage ? cancelEdit : cancelReply}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close" size={24} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Input */}
       <View style={styles.inputContainer}>
@@ -226,7 +334,7 @@ export default function ChatScreen() {
         
         <TextInput
           style={styles.input}
-          placeholder="Type a message..."
+          placeholder={editingMessage ? 'Edit message...' : 'Type a message...'}
           value={inputText}
           onChangeText={setInputText}
           multiline
@@ -240,9 +348,13 @@ export default function ChatScreen() {
             disabled={sending}
           >
             {sending ? (
-              <ActivityIndicator size="small" color={colors.textLight} />
+              <LoadingSpinner size={20} color={colors.textLight} />
             ) : (
-              <Ionicons name="send" size={20} color={colors.textLight} />
+              <Ionicons 
+                name={editingMessage ? 'checkmark' : 'send'} 
+                size={20} 
+                color={colors.textLight} 
+              />
             )}
           </TouchableOpacity>
         ) : (
@@ -404,5 +516,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
+  },
+  actionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  actionBarContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionBarText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  actionBarTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  actionBarSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
   },
 });
