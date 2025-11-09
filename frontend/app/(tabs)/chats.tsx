@@ -100,14 +100,32 @@ export default function ChatsScreen() {
     return otherUser?.is_online || false;
   };
 
+  const getLastMessagePreview = (chat: Chat) => {
+    if (!chat.last_message) return 'No messages yet';
+    
+    const content = chat.last_message.content;
+    const messageType = chat.last_message.message_type;
+    
+    if (messageType === 'image') return '📷 Image';
+    if (messageType === 'video') return '🎥 Video';
+    if (messageType === 'audio') return '🎵 Audio';
+    if (messageType === 'file') return '📎 File';
+    if (messageType === 'voice') return '🎤 Voice message';
+    
+    return content || 'Message';
+  };
+
   const renderChat = ({ item }: { item: Chat }) => {
     const lastMessageTime = item.last_message?.created_at
       ? format(new Date(item.last_message.created_at), 'HH:mm')
       : '';
 
+    const unreadCount = item.unread_count || 0;
+    const hasUnread = unreadCount > 0;
+
     return (
       <TouchableOpacity
-        style={styles.chatItem}
+        style={[styles.chatItem, hasUnread && styles.chatItemUnread]}
         onPress={() => handleChatPress(item.id)}
         activeOpacity={0.7}
       >
@@ -120,21 +138,28 @@ export default function ChatsScreen() {
 
         <View style={styles.chatInfo}>
           <View style={styles.chatHeader}>
-            <Text style={styles.chatName} numberOfLines={1}>
+            <Text style={[styles.chatName, hasUnread && styles.chatNameUnread]} numberOfLines={1}>
               {getChatName(item)}
             </Text>
             {lastMessageTime && (
-              <Text style={styles.chatTime}>{lastMessageTime}</Text>
+              <Text style={[styles.chatTime, hasUnread && styles.chatTimeUnread]}>
+                {lastMessageTime}
+              </Text>
             )}
           </View>
 
           <View style={styles.chatFooter}>
-            <Text style={styles.chatMessage} numberOfLines={1}>
-              {item.last_message?.content || 'No messages yet'}
+            <Text 
+              style={[styles.chatMessage, hasUnread && styles.chatMessageUnread]} 
+              numberOfLines={1}
+            >
+              {getLastMessagePreview(item)}
             </Text>
-            {item.unread_count > 0 && (
+            {hasUnread && (
               <View style={styles.unreadBadge}>
-                <Text style={styles.unreadText}>{item.unread_count}</Text>
+                <Text style={styles.unreadText}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
               </View>
             )}
           </View>
@@ -234,6 +259,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     flex: 1,
+  },
+  chatItemUnread: {
+    backgroundColor: colors.surface,
+  },
+  chatNameUnread: {
+    fontWeight: '600',
+    color: colors.text,
+  },
+  chatTimeUnread: {
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  chatMessageUnread: {
+    fontWeight: '500',
+    color: colors.text,
   },
   unreadBadge: {
     backgroundColor: colors.primary,

@@ -13,9 +13,7 @@ class SocketManager:
             async_mode='asgi',
             cors_allowed_origins='*',
             logger=True,
-            engineio_logger=True,
-            ping_timeout=60,
-            ping_interval=25
+            engineio_logger=True
         )
         
         # Track connected users: {user_id: {sid1, sid2, ...}}
@@ -33,7 +31,7 @@ class SocketManager:
         @self.sio.event
         async def connect(sid, environ):
             logger.info(f"Client connected: {sid}")
-            await self.sio.emit('connected', {'sid': sid, 'status': 'connected'}, room=sid)
+            await self.sio.emit('connected', {'sid': sid}, room=sid)
         
         @self.sio.event
         async def disconnect(sid):
@@ -61,6 +59,24 @@ class SocketManager:
                     
                     # Notify contacts
                     await self.broadcast_user_status(user_id, False)
+                
+                # Remove from chat presence
+                for chat_id in list(self.chat_presence.keys()):
+                    if user_id in self.chat_presence[chat_id]:
+                        self.chat_presence[chat_id].discard(user_id)
+                        if not self.chat_presence[chat_id]:
+                            del self.chat_presence[chat_id]
+                
+                # Remove from typing indicators
+                for chat_id in list(self.typing_users.keys()):
+                    if user_id in self.typing_users[chat_id]:
+                        self.typing_users[chat_id].discard(user_id)
+                        # Notify others that user stopped typing
+                        await self.sio.emit('user_typing', {
+                            'user_id': user_id,
+                            'chat_id': chat_id,
+                            'is_typing': False
+                        }, room=chat_id)
         
         @self.sio.event
         async def authenticate(sid, data):
@@ -81,7 +97,7 @@ class SocketManager:
                 await update_user(user_id, {'is_online': True, 'last_seen': utc_now()})
                 
                 logger.info(f"User {user_id} authenticated with session {sid}")
-                await self.sio.emit('authenticated', {'user_id': user_id, 'status': 'authenticated'}, room=sid)
+                await self.sio.emit('authenticated', {'user_id': user_id}, room=sid)
                 
                 # Notify contacts
                 await self.broadcast_user_status(user_id, True)
@@ -98,7 +114,6 @@ class SocketManager:
                 user_id = data.get('user_id')
                 
                 if not chat_id or not user_id:
-                    logger.error(f"Missing chat_id or user_id in join_chat")
                     return
                 
                 # Join Socket.IO room
@@ -109,14 +124,7 @@ class SocketManager:
                     self.chat_presence[chat_id] = set()
                 self.chat_presence[chat_id].add(user_id)
                 
-                logger.info(f"User {user_id} (sid: {sid}) joined chat {chat_id}")
-                
-                # Send confirmation to the user
-                await self.sio.emit('joined_chat', {
-                    'chat_id': chat_id,
-                    'user_id': user_id,
-                    'status': 'joined'
-                }, room=sid)
+                logger.info(f"User {user_id} joined chat {chat_id}")
                 
                 # Notify others in chat
                 await self.sio.emit('user_joined', {
@@ -126,7 +134,6 @@ class SocketManager:
                 
             except Exception as e:
                 logger.error(f"Join chat error: {e}")
-                await self.sio.emit('error', {'message': f'Failed to join chat: {str(e)}'}, room=sid)
         
         @self.sio.event
         async def leave_chat(sid, data):
@@ -147,7 +154,13 @@ class SocketManager:
                 
                 # Stop typing if was typing
                 if chat_id in self.typing_users:
-                    self.typing_users[chat_id].discard(user_id)
+                    if user_id in self.typing_users[chat_id]:
+                        self.typing_users[chat_id].discard(user_id)
+                        await self.sio.emit('user_typing', {
+                            'user_id': user_id,
+                            'chat_id': chat_id,
+                            'is_typing': False
+                        }, room=chat_id)
                 
                 logger.info(f"User {user_id} left chat {chat_id}")
                 
@@ -184,27 +197,16 @@ class SocketManager:
                 logger.error(f"Typing indicator error: {e}")
     
     async def send_message_to_chat(self, chat_id: str, message_data: dict):
-        """Send a message to all users in a chat - improved version"""
+        """Send a message to all users in a chat"""
         try:
-            # First, emit to the chat room
+            # Ensure the message_data includes chat_id
+            if 'chat_id' not in message_data:
+                message_data['chat_id'] = chat_id
+                
             await self.sio.emit('new_message', message_data, room=chat_id)
-            logger.info(f"Message sent to chat room {chat_id}")
-            
-            # Also send directly to all participants to ensure delivery
-            # even if they haven't joined the room yet
-            from database import get_chat_by_id
-            chat = await get_chat_by_id(chat_id)
-            if chat:
-                for participant_id in chat['participants']:
-                    if participant_id in self.user_connections:
-                        for sid in self.user_connections[participant_id]:
-                            # Send to each session of the user
-                            await self.sio.emit('new_message', message_data, room=sid)
-                        logger.info(f"Message sent directly to user {participant_id}")
+            logger.info(f"Message sent to chat {chat_id}")
         except Exception as e:
             logger.error(f"Error sending message to chat: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
     
     async def send_message_to_user(self, user_id: str, event: str, data: dict):
         """Send a message to a specific user (all their connections)"""
@@ -212,33 +214,26 @@ class SocketManager:
             if user_id in self.user_connections:
                 for sid in self.user_connections[user_id]:
                     await self.sio.emit(event, data, room=sid)
-                logger.info(f"Event '{event}' sent to user {user_id}")
         except Exception as e:
             logger.error(f"Error sending message to user: {e}")
     
     async def broadcast_user_status(self, user_id: str, is_online: bool):
         """Broadcast user online/offline status to their contacts"""
         try:
-            from database import get_user_by_id, get_user_chats
+            from database import get_user_by_id
             user = await get_user_by_id(user_id)
             
             if not user:
                 return
             
-            # Get all chats the user is part of
-            chats = await get_user_chats(user_id)
-            notified_users = set()
-            
-            # Notify all participants in those chats
-            for chat in chats:
-                for participant_id in chat['participants']:
-                    if participant_id != user_id and participant_id not in notified_users:
-                        await self.send_message_to_user(participant_id, 'user_status', {
-                            'user_id': user_id,
-                            'is_online': is_online,
-                            'last_seen': user.get('last_seen').isoformat() if user.get('last_seen') else None
-                        })
-                        notified_users.add(participant_id)
+            # Send status to all contacts
+            contacts = user.get('contacts', [])
+            for contact_id in contacts:
+                await self.send_message_to_user(contact_id, 'user_status', {
+                    'user_id': user_id,
+                    'is_online': is_online,
+                    'last_seen': user.get('last_seen').isoformat() if user.get('last_seen') else None
+                })
         except Exception as e:
             logger.error(f"Error broadcasting user status: {e}")
     
@@ -246,21 +241,45 @@ class SocketManager:
         """Broadcast message status update"""
         try:
             await self.sio.emit('message_status', {
+                'chat_id': chat_id,
                 'message_id': message_id,
                 'status': status,
                 'user_id': user_id
             }, room=chat_id)
-            logger.info(f"Message status update sent for {message_id}")
         except Exception as e:
             logger.error(f"Error updating message status: {e}")
     
     async def broadcast_reaction(self, chat_id: str, reaction_data: dict):
         """Broadcast message reaction to chat"""
         try:
+            # Ensure chat_id is included
+            if 'chat_id' not in reaction_data:
+                reaction_data['chat_id'] = chat_id
+                
             await self.sio.emit('message_reaction', reaction_data, room=chat_id)
-            logger.info(f"Reaction broadcast for message {reaction_data.get('message_id')}")
         except Exception as e:
             logger.error(f"Error broadcasting reaction: {e}")
+    
+    async def broadcast_message_edit(self, chat_id: str, message_id: str, content: str):
+        """Broadcast message edit to chat"""
+        try:
+            await self.sio.emit('message_edited', {
+                'chat_id': chat_id,
+                'message_id': message_id,
+                'content': content
+            }, room=chat_id)
+        except Exception as e:
+            logger.error(f"Error broadcasting message edit: {e}")
+    
+    async def broadcast_message_deletion(self, chat_id: str, message_id: str):
+        """Broadcast message deletion to chat"""
+        try:
+            await self.sio.emit('message_deleted', {
+                'chat_id': chat_id,
+                'message_id': message_id
+            }, room=chat_id)
+        except Exception as e:
+            logger.error(f"Error broadcasting message deletion: {e}")
 
 # Global socket manager instance
 socket_manager = SocketManager()

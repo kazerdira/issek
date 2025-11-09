@@ -7,6 +7,7 @@ const API_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_BACKEND_URL || process.
 class SocketService {
   private socket: Socket | null = null;
   private userId: string | null = null;
+  private currentChatId: string | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private isConnecting = false;
@@ -86,33 +87,22 @@ class SocketService {
     this.socket.on('new_message', (message) => {
       console.log('📨 New message received:', message);
       try {
-        const { addMessage, messages, updateChat, currentChat, chats } = useChatStore.getState();
+        const { addMessage, updateLastMessage, incrementChatUnreadCount } = useChatStore.getState();
         
-        // Check if message already exists to avoid duplicates
-        const chatMessages = messages[message.chat_id] || [];
-        const exists = chatMessages.some(m => m.id === message.id);
+        // Add message to store (it will check for duplicates)
+        addMessage(message.chat_id, message);
+        console.log('Message added to store for chat:', message.chat_id);
         
-        if (!exists) {
-          addMessage(message.chat_id, message);
-          console.log('Message added to store for chat:', message.chat_id);
-          
-          // Update chat's last message in the chats list
-          const chat = chats.find(c => c.id === message.chat_id);
-          if (chat) {
-            const isInCurrentChat = currentChat?.id === message.chat_id;
-            const isSender = message.sender_id === this.userId;
-            
-            updateChat(message.chat_id, {
-              last_message: message,
-              // Increment unread count if: 1) not the sender, 2) not currently viewing this chat
-              unread_count: !isSender && !isInCurrentChat 
-                ? (chat.unread_count || 0) + 1 
-                : chat.unread_count || 0,
-            });
-            console.log(`Updated chat ${message.chat_id} - unread: ${chat.unread_count}`);
-          }
-        } else {
-          console.log('Message already exists, skipping');
+        // Update last message in chat list
+        updateLastMessage(message.chat_id, message);
+        
+        // Increment unread count if: 1) not the sender, 2) not currently viewing this chat
+        const isInCurrentChat = this.currentChatId === message.chat_id;
+        const isSender = message.sender_id === this.userId;
+        
+        if (!isSender && !isInCurrentChat) {
+          incrementChatUnreadCount(message.chat_id);
+          console.log(`Incremented unread count for chat ${message.chat_id}`);
         }
       } catch (error) {
         console.error('Error handling new message:', error);
@@ -203,6 +193,11 @@ class SocketService {
     this.socket.emit('authenticate', { user_id: userId });
   }
 
+  setCurrentChat(chatId: string | null) {
+    this.currentChatId = chatId;
+    console.log('Current chat set to:', chatId);
+  }
+
   joinChat(chatId: string, userId: string) {
     if (!this.socket?.connected) {
       console.warn('Cannot join chat: socket not connected');
@@ -210,6 +205,7 @@ class SocketService {
     }
     console.log('Joining chat:', chatId, 'for user:', userId);
     this.socket.emit('join_chat', { chat_id: chatId, user_id: userId });
+    this.setCurrentChat(chatId);
   }
 
   leaveChat(chatId: string, userId: string) {
@@ -219,6 +215,7 @@ class SocketService {
     }
     console.log('Leaving chat:', chatId);
     this.socket.emit('leave_chat', { chat_id: chatId, user_id: userId });
+    this.setCurrentChat(null);
   }
 
   sendTyping(chatId: string, userId: string, isTyping: boolean) {

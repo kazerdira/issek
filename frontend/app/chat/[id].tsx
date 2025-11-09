@@ -19,6 +19,7 @@ import { useAuthStore } from '../../src/store/authStore';
 import { chatsAPI } from '../../src/services/api';
 import { socketService } from '../../src/services/socket';
 import { Avatar } from '../../src/components/Avatar';
+import { TypingIndicator } from '../../src/components/TypingIndicator';
 import { colors } from '../../src/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -30,7 +31,7 @@ export default function ChatScreen() {
   const { id } = useLocalSearchParams();
   const chatId = typeof id === 'string' ? id : id[0];
   
-  const { currentChat, setCurrentChat, messages, setMessages, addMessage, typingUsers } = useChatStore();
+  const { currentChat, setCurrentChat, messages, setMessages, addMessage, typingUsers, resetChatUnreadCount } = useChatStore();
   const { user } = useAuthStore();
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -56,8 +57,7 @@ export default function ChatScreen() {
       socketService.joinChat(chatId, user.id);
       
       // Reset unread count when entering chat
-      const { updateChat } = useChatStore.getState();
-      updateChat(chatId, { unread_count: 0 });
+      resetChatUnreadCount(chatId);
       console.log(`Reset unread count for chat ${chatId}`);
     }
 
@@ -102,6 +102,24 @@ export default function ChatScreen() {
       const response = await chatsAPI.getMessages(chatId);
       setMessages(chatId, response.data);
       console.log(`Loaded ${response.data.length} messages`);
+      
+      // Mark all unread messages as read
+      if (user) {
+        const unreadMessages = response.data.filter(
+          (msg: Message) => msg.sender_id !== user.id && msg.status !== 'read'
+        );
+        
+        if (unreadMessages.length > 0) {
+          console.log(`Marking ${unreadMessages.length} messages as read`);
+          for (const msg of unreadMessages) {
+            try {
+              await chatsAPI.markAsRead(msg.id);
+            } catch (error) {
+              console.error('Error marking message as read:', error);
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error('Error loading messages:', error);
     } finally {
@@ -352,6 +370,32 @@ export default function ChatScreen() {
     return 'typing...';
   };
 
+  const getTypingUsers = () => {
+    if (!typingUsers[chatId]) return [];
+    return typingUsers[chatId].filter(userId => userId !== user?.id);
+  };
+
+  const renderTypingIndicator = () => {
+    const typing = getTypingUsers();
+    if (typing.length === 0) return null;
+
+    const otherUser = currentChat?.participant_details?.find((p) => typing.includes(p.id));
+    const name = otherUser?.display_name || 'Someone';
+
+    return (
+      <View style={styles.typingContainer}>
+        <Avatar
+          uri={otherUser?.avatar}
+          name={name}
+          size={32}
+        />
+        <View style={styles.typingBubble}>
+          <TypingIndicator size={6} dotColor={colors.textSecondary} />
+        </View>
+      </View>
+    );
+  };
+
   const renderReplyPreview = () => {
     if (!replyTo) return null;
 
@@ -511,6 +555,7 @@ export default function ChatScreen() {
         renderItem={renderMessage}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messagesList}
+        ListFooterComponent={renderTypingIndicator}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         ListEmptyComponent={
           <View style={styles.emptyState}>
@@ -852,5 +897,21 @@ const styles = StyleSheet.create({
   },
   reactionButtonText: {
     fontSize: 24,
+  },
+  typingContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginVertical: 8,
+    paddingHorizontal: 16,
+  },
+  typingBubble: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginLeft: 8,
+    minWidth: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

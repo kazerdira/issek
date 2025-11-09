@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
-  Platform,
-  BackHandler,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useChatStore, Chat } from '../../src/store/chatStore';
 import { chatsAPI } from '../../src/services/api';
 import { Avatar } from '../../src/components/Avatar';
@@ -21,45 +19,15 @@ import { useAuthStore } from '../../src/store/authStore';
 
 export default function ChatsScreen() {
   const router = useRouter();
-  const { chats, setChats } = useChatStore();
+  const { chats, setChats, updateChatUnreadCount } = useChatStore();
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  // Handle Android back button
-  useFocusEffect(
-    useCallback(() => {
-      const onBackPress = () => {
-        // Return true to prevent default back behavior (exit app)
-        // Return false to allow default back behavior
-        return true; // Stay on this screen
-      };
-
-      if (Platform.OS === 'android') {
-        BackHandler.addEventListener('hardwareBackPress', onBackPress);
-        return () =>
-          BackHandler.removeEventListener('hardwareBackPress', onBackPress);
-      }
-    }, [])
-  );
-
-  // Reload chats when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      console.log('Chats screen focused, reloading chats');
-      loadChats();
-    }, [])
-  );
-
-  useEffect(() => {
-    loadChats();
-  }, []);
 
   const loadChats = async () => {
     try {
       const response = await chatsAPI.getChats();
       setChats(response.data);
-      console.log(`Loaded ${response.data.length} chats`);
     } catch (error) {
       console.error('Error loading chats:', error);
     } finally {
@@ -68,14 +36,18 @@ export default function ChatsScreen() {
     }
   };
 
+  useEffect(() => {
+    loadChats();
+    
+    // Refresh chats every 30 seconds to update unread counts
+    const interval = setInterval(loadChats, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
   const handleRefresh = () => {
     setRefreshing(true);
     loadChats();
-  };
-
-  const handleChatPress = (chatId: string) => {
-    console.log('Navigating to chat:', chatId);
-    router.push(`/chat/${chatId}`);
   };
 
   const getChatName = (chat: Chat) => {
@@ -101,16 +73,33 @@ export default function ChatsScreen() {
     return otherUser?.is_online || false;
   };
 
+  const getLastMessagePreview = (chat: Chat) => {
+    if (!chat.last_message) return 'No messages yet';
+    
+    const content = chat.last_message.content;
+    const messageType = chat.last_message.message_type;
+    
+    if (messageType === 'image') return '📷 Image';
+    if (messageType === 'video') return '🎥 Video';
+    if (messageType === 'audio') return '🎵 Audio';
+    if (messageType === 'file') return '📎 File';
+    if (messageType === 'voice') return '🎤 Voice message';
+    
+    return content || 'Message';
+  };
+
   const renderChat = ({ item }: { item: Chat }) => {
     const lastMessageTime = item.last_message?.created_at
       ? format(new Date(item.last_message.created_at), 'HH:mm')
       : '';
 
+    const unreadCount = item.unread_count || 0;
+    const hasUnread = unreadCount > 0;
+
     return (
       <TouchableOpacity
-        style={styles.chatItem}
-        onPress={() => handleChatPress(item.id)}
-        activeOpacity={0.7}
+        style={[styles.chatItem, hasUnread && styles.chatItemUnread]}
+        onPress={() => router.push(`/chat/${item.id}`)}
       >
         <Avatar
           uri={getChatAvatar(item)}
@@ -121,21 +110,28 @@ export default function ChatsScreen() {
 
         <View style={styles.chatInfo}>
           <View style={styles.chatHeader}>
-            <Text style={styles.chatName} numberOfLines={1}>
+            <Text style={[styles.chatName, hasUnread && styles.chatNameUnread]} numberOfLines={1}>
               {getChatName(item)}
             </Text>
             {lastMessageTime && (
-              <Text style={styles.chatTime}>{lastMessageTime}</Text>
+              <Text style={[styles.chatTime, hasUnread && styles.chatTimeUnread]}>
+                {lastMessageTime}
+              </Text>
             )}
           </View>
 
           <View style={styles.chatFooter}>
-            <Text style={styles.chatMessage} numberOfLines={1}>
-              {item.last_message?.content || 'No messages yet'}
+            <Text 
+              style={[styles.chatMessage, hasUnread && styles.chatMessageUnread]} 
+              numberOfLines={1}
+            >
+              {getLastMessagePreview(item)}
             </Text>
-            {item.unread_count > 0 && (
+            {hasUnread && (
               <View style={styles.unreadBadge}>
-                <Text style={styles.unreadText}>{item.unread_count}</Text>
+                <Text style={styles.unreadText}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
               </View>
             )}
           </View>
@@ -178,7 +174,6 @@ export default function ChatsScreen() {
       <TouchableOpacity
         style={styles.fab}
         onPress={() => router.push('/(tabs)/contacts')}
-        activeOpacity={0.8}
       >
         <Ionicons name="create" size={24} color={colors.textLight} />
       </TouchableOpacity>
@@ -204,6 +199,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     backgroundColor: colors.background,
   },
+  chatItemUnread: {
+    backgroundColor: 'rgba(108, 92, 231, 0.03)',
+  },
   chatInfo: {
     flex: 1,
     marginLeft: 12,
@@ -221,10 +219,18 @@ const styles = StyleSheet.create({
     color: colors.text,
     flex: 1,
   },
+  chatNameUnread: {
+    fontWeight: '700',
+    color: colors.text,
+  },
   chatTime: {
     fontSize: 12,
     color: colors.textSecondary,
     marginLeft: 8,
+  },
+  chatTimeUnread: {
+    color: colors.primary,
+    fontWeight: '600',
   },
   chatFooter: {
     flexDirection: 'row',
@@ -236,11 +242,15 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     flex: 1,
   },
+  chatMessageUnread: {
+    color: colors.text,
+    fontWeight: '500',
+  },
   unreadBadge: {
     backgroundColor: colors.primary,
     borderRadius: 12,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     marginLeft: 8,
     minWidth: 24,
     alignItems: 'center',
@@ -248,8 +258,8 @@ const styles = StyleSheet.create({
   },
   unreadText: {
     color: colors.textLight,
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
   },
   emptyContainer: {
     flex: 1,
