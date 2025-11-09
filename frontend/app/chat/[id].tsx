@@ -54,6 +54,11 @@ export default function ChatScreen() {
     if (user) {
       console.log('Joining chat via socket');
       socketService.joinChat(chatId, user.id);
+      
+      // Reset unread count when entering chat
+      const { updateChat } = useChatStore.getState();
+      updateChat(chatId, { unread_count: 0 });
+      console.log(`Reset unread count for chat ${chatId}`);
     }
 
     // Cleanup on unmount

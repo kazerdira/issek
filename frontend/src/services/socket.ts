@@ -86,7 +86,7 @@ class SocketService {
     this.socket.on('new_message', (message) => {
       console.log('📨 New message received:', message);
       try {
-        const { addMessage, messages } = useChatStore.getState();
+        const { addMessage, messages, updateChat, currentChat, chats } = useChatStore.getState();
         
         // Check if message already exists to avoid duplicates
         const chatMessages = messages[message.chat_id] || [];
@@ -95,6 +95,22 @@ class SocketService {
         if (!exists) {
           addMessage(message.chat_id, message);
           console.log('Message added to store for chat:', message.chat_id);
+          
+          // Update chat's last message in the chats list
+          const chat = chats.find(c => c.id === message.chat_id);
+          if (chat) {
+            const isInCurrentChat = currentChat?.id === message.chat_id;
+            const isSender = message.sender_id === this.userId;
+            
+            updateChat(message.chat_id, {
+              last_message: message,
+              // Increment unread count if: 1) not the sender, 2) not currently viewing this chat
+              unread_count: !isSender && !isInCurrentChat 
+                ? (chat.unread_count || 0) + 1 
+                : chat.unread_count || 0,
+            });
+            console.log(`Updated chat ${message.chat_id} - unread: ${chat.unread_count}`);
+          }
         } else {
           console.log('Message already exists, skipping');
         }
