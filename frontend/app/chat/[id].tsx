@@ -425,6 +425,15 @@ export default function ChatScreen() {
       ? chatMessages.find(m => m.id === item.reply_to)
       : null;
 
+    // Check if message is media-only (no text content beyond filename/placeholder)
+    const isMediaOnly = item.media_url && (
+      !item.content || 
+      item.content === 'Media' || 
+      item.content.startsWith('data:') ||
+      item.content.startsWith('http://') ||
+      item.content.startsWith('https://')
+    );
+
     return (
       <TouchableOpacity
         onLongPress={() => handleLongPress(item)}
@@ -439,8 +448,12 @@ export default function ChatScreen() {
         )}
         {!showAvatar && !isMe && <View style={{ width: 32 }} />}
         
-        <View style={[styles.messageBubble, isMe ? styles.messageBubbleMe : styles.messageBubbleOther]}>
-          {!isMe && showAvatar && (
+        <View style={[
+          styles.messageBubble, 
+          isMe ? styles.messageBubbleMe : styles.messageBubbleOther,
+          isMediaOnly && styles.mediaBubble
+        ]}>
+          {!isMe && showAvatar && !isMediaOnly && (
             <Text style={styles.senderName}>{item.sender?.display_name}</Text>
           )}
           
@@ -462,9 +475,12 @@ export default function ChatScreen() {
             />
           )}
           
-          <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther]}>
-            {item.deleted ? '🚫 This message was deleted' : item.content}
-          </Text>
+          {/* Only show text if it's not media-only or if message is deleted */}
+          {(!isMediaOnly || item.deleted) && (
+            <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther]}>
+              {item.deleted ? '🚫 This message was deleted' : item.content}
+            </Text>
+          )}
           
           {hasReactions && (
             <View style={styles.reactionsContainer}>
@@ -481,8 +497,15 @@ export default function ChatScreen() {
             </View>
           )}
           
-          <View style={styles.messageFooter}>
-            <Text style={[styles.messageTime, isMe ? styles.messageTimeMe : styles.messageTimeOther]}>
+          <View style={[
+            styles.messageFooter,
+            isMediaOnly && styles.mediaMessageFooter
+          ]}>
+            <Text style={[
+              styles.messageTime, 
+              isMe ? styles.messageTimeMe : styles.messageTimeOther,
+              isMediaOnly && styles.mediaMessageTime
+            ]}>
               {messageTime}
               {item.edited && ' (edited)'}
             </Text>
@@ -490,7 +513,7 @@ export default function ChatScreen() {
               <Ionicons
                 name={item.status === 'read' ? 'checkmark-done' : 'checkmark'}
                 size={14}
-                color={item.status === 'read' ? colors.primary : colors.textLight}
+                color={isMediaOnly ? colors.textLight : (item.status === 'read' ? colors.primary : colors.textLight)}
                 style={{ marginLeft: 4 }}
               />
             )}
@@ -717,6 +740,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.messageReceived,
     borderBottomLeftRadius: 4,
   },
+  mediaBubble: {
+    backgroundColor: 'transparent',
+    padding: 0,
+    maxWidth: '80%',
+  },
   senderName: {
     fontSize: 12,
     fontWeight: '600',
@@ -726,8 +754,22 @@ const styles = StyleSheet.create({
   messageImage: {
     width: 200,
     height: 200,
-    borderRadius: 8,
-    marginBottom: 8,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  mediaMessageFooter: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mediaMessageTime: {
+    color: colors.textLight,
   },
   messageText: {
     fontSize: 16,
