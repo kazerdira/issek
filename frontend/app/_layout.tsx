@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuthStore } from '../src/store/authStore';
 import { setAuthToken } from '../src/services/api';
 import { socketService } from '../src/services/socket';
@@ -25,7 +26,7 @@ export default function RootLayout() {
   }, [token, user]);
 
   return (
-    <>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style="auto" />
       <Stack
         screenOptions={{
@@ -39,6 +40,6 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="chat/[id]" />
       </Stack>
-    </>
+    </GestureHandlerRootView>
   );
 }
