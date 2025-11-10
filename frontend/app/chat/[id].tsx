@@ -556,6 +556,7 @@ export default function ChatScreen() {
                 isMe={isMe}
                 showAvatar={showAvatar}
                 userId={user?.id}
+                participantDetails={currentChat?.participant_details || []}
                 repliedToMessage={repliedToMessage}
                 onReply={handleReply}
                 onReact={handleReact}

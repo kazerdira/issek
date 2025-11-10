@@ -20,6 +20,7 @@ interface MessageItemProps {
   isMe: boolean;
   showAvatar: boolean;
   userId?: string; // For checking user's reactions
+  participantDetails?: any[]; // For showing user avatars in reactions
   repliedToMessage?: Message | null; // The actual message being replied to
   onReply: (message: Message) => void;
   onReact: (message: Message, emoji: string) => void;
@@ -32,11 +33,25 @@ const SWIPE_THRESHOLD = 50;
 const MAX_SWIPE = 100;
 const ICON_START_THRESHOLD = 20;
 
+// Helper function to generate consistent colors from names
+const getColorFromName = (name: string): string => {
+  const colors = [
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
+    '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B195', '#C06C84'
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
+
 export const MessageItemGesture: React.FC<MessageItemProps> = ({
   message,
   isMe,
   showAvatar,
   userId,
+  participantDetails = [],
   repliedToMessage,
   onReply,
   onReact,
@@ -334,14 +349,16 @@ export const MessageItemGesture: React.FC<MessageItemProps> = ({
                   {/* ✅ Wrapper for actual content with margin after reply */}
                   <View style={message.reply_to && styles.actualMessageContent}>
                     {message.media_url && (
-                      <Image 
-                        source={{ uri: message.media_url }}
-                        style={[
-                          styles.messageImage,
-                          !message.content && styles.mediaOnlyImage
-                        ]}
-                        resizeMode="cover"
-                      />
+                      <View style={styles.imageContainer}>
+                        <Image 
+                          source={{ uri: message.media_url }}
+                          style={[
+                            styles.messageImage,
+                            !message.content && styles.mediaOnlyImage
+                          ]}
+                          resizeMode="cover"
+                        />
+                      </View>
                     )}
 
                     {message.content && (
@@ -354,6 +371,67 @@ export const MessageItemGesture: React.FC<MessageItemProps> = ({
                       </Text>
                     )}
                   </View>
+
+                  {/* ✅ TELEGRAM: Reactions INSIDE bubble (smart positioning) */}
+                  {message.reactions && Object.keys(message.reactions).length > 0 && (
+                    <View style={styles.reactionsInsideBubble}>
+                      {Object.entries(message.reactions).map(([emoji, userIds]) => {
+                        if (!userIds || userIds.length === 0) return null;
+                        
+                        // Get user details for avatars
+                        const reactionUsers = (userIds as string[])
+                          .map(uid => participantDetails.find((p: any) => p.id === uid))
+                          .filter(Boolean);
+                        
+                        return (
+                          <TouchableOpacity
+                            key={emoji}
+                            style={[
+                              styles.reactionBubbleInside,
+                              isMe ? styles.reactionBubbleInsideMe : styles.reactionBubbleInsideOther
+                            ]}
+                            onPress={() => onReact(message, emoji)}
+                          >
+                            <Text style={styles.reactionEmojiInside}>{emoji}</Text>
+                            <View style={styles.reactionAvatars}>
+                              {reactionUsers.slice(0, 3).map((reactUser: any, idx: number) => (
+                                <View
+                                  key={reactUser?.id || idx}
+                                  style={[
+                                    styles.reactionAvatar,
+                                    idx > 0 && styles.reactionAvatarOverlap
+                                  ]}
+                                >
+                                  {reactUser?.avatar ? (
+                                    <Image 
+                                      source={{ uri: reactUser.avatar }} 
+                                      style={styles.reactionAvatarImage}
+                                    />
+                                  ) : (
+                                    <View style={[
+                                      styles.reactionAvatarPlaceholder, 
+                                      { backgroundColor: getColorFromName(reactUser?.display_name || 'U') }
+                                    ]}>
+                                      <Text style={styles.reactionAvatarText}>
+                                        {(reactUser?.display_name || 'U')[0].toUpperCase()}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              ))}
+                              {(userIds as string[]).length > 3 && (
+                                <View style={[styles.reactionAvatar, styles.reactionAvatarOverlap, styles.reactionAvatarMore]}>
+                                  <Text style={styles.reactionAvatarMoreText}>
+                                    +{(userIds as string[]).length - 3}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
 
                   {/* ✅ TELEGRAM: Timestamp ONLY for media-only messages */}
                   {!message.content && message.media_url && (
@@ -374,25 +452,6 @@ export const MessageItemGesture: React.FC<MessageItemProps> = ({
                 </>
               )}
                 </TouchableOpacity>
-
-                {/* Display Existing Reactions - INSIDE bubbleWithReactions */}
-                {message.reactions && Object.keys(message.reactions).length > 0 && (
-                  <View style={[styles.reactionsDisplay, isMe ? styles.reactionsDisplayMe : styles.reactionsDisplayOther]}>
-                    {Object.entries(message.reactions).map(([emoji, userIds]) => {
-                      if (!userIds || userIds.length === 0) return null;
-                      return (
-                        <TouchableOpacity
-                          key={emoji}
-                          style={styles.reactionBadge}
-                          onPress={() => onReact(message, emoji)}
-                        >
-                          <Text style={styles.reactionBadgeEmoji}>{emoji}</Text>
-                          <Text style={styles.reactionBadgeCount}>{userIds.length}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                )}
               </Animated.View>
           </View>
         </View>
@@ -454,31 +513,36 @@ const styles = StyleSheet.create({
   },
   messageWrapper: {
     zIndex: 1,
-    paddingHorizontal: 8,    // ✅ TELEGRAM: Reduced from 12
+    paddingHorizontal: 8,
+    width: '100%',           // ✅ Full width container
   },
   messageWrapperMe: {
-    alignSelf: 'flex-end',
+    alignItems: 'flex-end',  // ✅ Align to right
   },
   messageWrapperOther: {
-    alignSelf: 'flex-start',
+    alignItems: 'flex-start', // ✅ Align to left
   },
   messageRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+    maxWidth: '85%',         // ✅ Max width for the entire message row
   },
   bubbleWithReactions: {
     position: 'relative',
     marginBottom: 10,
+    alignSelf: 'flex-start', // ✅ Dynamic width based on content
   },
   messageBubble: {
-    maxWidth: '75%',
-    paddingHorizontal: 10,   // ✅ TELEGRAM: Tighter (was 12)
-    paddingVertical: 8,      // ✅ TELEGRAM: Consistent vertical padding
-    marginLeft: 8,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 8,
     position: 'relative',
     overflow: 'hidden',
-    elevation: 0,            // ✅ TELEGRAM: No shadow (flat design)
-    shadowOpacity: 0,        // ✅ TELEGRAM: No shadow
+    elevation: 0,
+    shadowOpacity: 0,
+    alignSelf: 'flex-start', // ✅ Shrink to content
+    minWidth: 50,            // ✅ Minimum width for very short messages
+    maxWidth: '100%',        // ✅ Can expand within messageRow
   },
   messageBubbleMe: {
     backgroundColor: colors.primary,
@@ -500,26 +564,30 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginBottom: 4,
   },
+  imageContainer: {
+    alignSelf: 'flex-start',  // ✅ Shrink to image size
+  },
   messageImage: {
-    width: 240,
-    height: 240,
+    width: 220,
+    height: 220,
     borderRadius: 12,
-    marginBottom: 0,
+    marginBottom: 4,
   },
   mediaOnlyImage: {
     marginBottom: 0,
-    width: 280,        // ✅ TELEGRAM: Larger for media-only
-    height: 280,
-    borderRadius: 0,   // ✅ Bubble handles radius
+    width: 260,
+    height: 260,
+    borderRadius: 12,    // ✅ Rounded for media-only
   },
   messageText: {
     fontSize: 16,
-    lineHeight: 21,      // ✅ TELEGRAM: Tighter line height
+    lineHeight: 21,
     flexWrap: 'wrap',
     flexShrink: 1,
+    alignSelf: 'flex-start',  // ✅ Start from left, wrap naturally
   },
   messageTextWithMedia: {
-    marginTop: 4,
+    marginTop: 8,
   },
   messageTextMe: {
     color: '#FFFFFF',
@@ -644,5 +712,71 @@ const styles = StyleSheet.create({
     fontSize: 13,            // ✅ Back to 13px (was 14)
     lineHeight: 16,          // ✅ Tighter (was 18)
     // Color set inline
+  },
+  // ✅ TELEGRAM: Reactions INSIDE bubble with user avatars (smart positioning)
+  reactionsInsideBubble: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,          // Tighter spacing from content
+    marginBottom: -2,      // Pull closer to bubble edge
+  },
+  reactionBubbleInside: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 3,      // ✅ More compact
+    paddingLeft: 5,          // ✅ Tighter
+    paddingRight: 7,         // ✅ Tighter
+    borderRadius: 10,        // ✅ Slightly smaller radius
+    gap: 5,                  // ✅ Tighter gap
+  },
+  reactionBubbleInsideMe: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',  // ✅ Slightly more visible
+  },
+  reactionBubbleInsideOther: {
+    backgroundColor: 'rgba(108, 92, 231, 0.15)',  // ✅ Slightly more visible
+  },
+  reactionEmojiInside: {
+    fontSize: 16,
+  },
+  reactionAvatars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  reactionAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: '#F5F7FA',
+  },
+  reactionAvatarOverlap: {
+    marginLeft: -8,
+  },
+  reactionAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  reactionAvatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reactionAvatarText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.textLight,
+  },
+  reactionAvatarMore: {
+    backgroundColor: colors.textSecondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reactionAvatarMoreText: {
+    fontSize: 8,
+    fontWeight: '600',
+    color: colors.textLight,
   },
 });
