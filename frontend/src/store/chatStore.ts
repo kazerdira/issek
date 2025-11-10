@@ -9,6 +9,7 @@ export interface Message {
   status: 'sent' | 'delivered' | 'read';
   reactions: Record<string, string[]>;
   reply_to?: string;
+  reply_to_message?: Message; // Populated replied message from backend
   media_url?: string;
   file_name?: string;
   created_at: string;

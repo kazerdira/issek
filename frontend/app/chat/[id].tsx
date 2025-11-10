@@ -21,11 +21,25 @@ import { Avatar } from '../../src/components/Avatar';
 import { TypingIndicator } from '../../src/components/TypingIndicator';
 import { MessageItemGesture } from '../../src/components/MessageItemGesture';
 import { MessageActionsSheet } from '../../src/components/MessageActionsSheet';
+import { ImagePickerModal } from '../../src/components/ImagePickerModal';
 import { colors } from '../../src/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Clipboard from 'expo-clipboard';
+import { format } from 'date-fns';
+
+// ✅ TELEGRAM: Helper to determine if timestamp should be shown above message
+const shouldShowTimestamp = (currentMsg: Message, prevMsg: Message | null): boolean => {
+  if (!prevMsg) return true;
+  
+  const currentTime = new Date(currentMsg.created_at);
+  const prevTime = new Date(prevMsg.created_at);
+  
+  // Show timestamp if messages are more than 5 minutes apart
+  const diffMinutes = (currentTime.getTime() - prevTime.getTime()) / (1000 * 60);
+  return diffMinutes > 5;
+};
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -41,6 +55,7 @@ export default function ChatScreen() {
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [showReactions, setShowReactions] = useState(false);
   const [showActionsSheet, setShowActionsSheet] = useState(false);
+  const [imageModalVisible, setImageModalVisible] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const messageInputRef = useRef<TextInput>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -207,29 +222,32 @@ export default function ChatScreen() {
     }
   };
 
-  const handleImagePicker = async () => {
+  const handleImagePicker = () => {
+    setImageModalVisible(true);
+  };
+
+  const handleImageSelected = async (imageUri: string) => {
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      // Convert URI to base64
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+      const reader = new FileReader();
       
-      if (!permissionResult.granted) {
-        Alert.alert('Permission required', 'Please allow access to your photo library');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.All,
-        allowsEditing: true,
-        quality: 0.8,
-        base64: true,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        await sendMediaMessage(asset);
-      }
+      reader.onloadend = async () => {
+        const base64data = reader.result as string;
+        const base64 = base64data.split(',')[1]; // Remove data:image/jpeg;base64, prefix
+        
+        await sendMediaMessage({
+          uri: imageUri,
+          type: 'image',
+          base64: base64,
+        });
+      };
+      
+      reader.readAsDataURL(blob);
     } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image');
+      console.error('Error processing image:', error);
+      Alert.alert('Error', 'Failed to process image');
     }
   };
 
@@ -283,16 +301,13 @@ export default function ChatScreen() {
 
   const handleReaction = async (messageId: string, emoji: string) => {
     try {
-      const message = chatMessages.find(m => m.id === messageId);
-      if (!message || !user) return;
+      if (!user) return;
 
-      const hasReacted = message.reactions[emoji]?.includes(user.id);
-
-      if (hasReacted) {
-        await chatsAPI.removeReaction(messageId, emoji);
-      } else {
-        await chatsAPI.addReaction(messageId, emoji);
-      }
+      // Backend now handles toggle logic automatically:
+      // - If user already has this emoji → removes it (toggle off)
+      // - If user has different emoji → replaces it
+      // - If user has no reaction → adds it
+      await chatsAPI.addReaction(messageId, emoji);
 
       setShowReactions(false);
       setSelectedMessage(null);
@@ -309,6 +324,7 @@ export default function ChatScreen() {
 
   const handleReact = async (message: Message, emoji: string) => {
     try {
+      // Backend handles toggle logic automatically (single reaction per user)
       await chatsAPI.addReaction(message.id, emoji);
     } catch (error) {
       console.error('Error adding reaction:', error);
@@ -515,16 +531,38 @@ export default function ChatScreen() {
           const isMe = item.sender_id === user?.id;
           const showAvatar = !isMe && (index === 0 || chatMessages[index - 1]?.sender_id !== item.sender_id);
           
+          // Find the replied-to message if this is a reply
+          const repliedToMessage = item.reply_to 
+            ? chatMessages.find(msg => msg.id === item.reply_to)
+            : null;
+
+          // ✅ TELEGRAM: Check if timestamp should be shown above this message
+          const prevMsg = index > 0 ? chatMessages[index - 1] : null;
+          const showTimestamp = shouldShowTimestamp(item, prevMsg);
+          
           return (
-            <MessageItemGesture
-              message={item}
-              isMe={isMe}
-              showAvatar={showAvatar}
-              onReply={handleReply}
-              onReact={handleReact}
-              onDelete={handleDelete}
-              onLongPress={handleMessageLongPress}
-            />
+            <>
+              {/* ✅ TELEGRAM: Timestamp ABOVE message group */}
+              {showTimestamp && (
+                <View style={styles.timestampContainer}>
+                  <Text style={styles.timestampText}>
+                    {format(new Date(item.created_at), 'HH:mm')}
+                  </Text>
+                </View>
+              )}
+              
+              <MessageItemGesture
+                message={item}
+                isMe={isMe}
+                showAvatar={showAvatar}
+                userId={user?.id}
+                repliedToMessage={repliedToMessage}
+                onReply={handleReply}
+                onReact={handleReact}
+                onDelete={handleDelete}
+                onLongPress={handleMessageLongPress}
+              />
+            </>
           );
         }}
         keyExtractor={(item) => item.id}
@@ -547,17 +585,7 @@ export default function ChatScreen() {
       <View style={styles.inputContainer}>
         <TouchableOpacity 
           style={styles.inputAction}
-          onPress={() => {
-            Alert.alert(
-              'Add Attachment',
-              '',
-              [
-                { text: 'Photo/Video', onPress: handleImagePicker },
-                { text: 'Document', onPress: handleDocumentPicker },
-                { text: 'Cancel', style: 'cancel' },
-              ]
-            );
-          }}
+          onPress={handleImagePicker}
         >
           <Ionicons name="add-circle" size={28} color={colors.primary} />
         </TouchableOpacity>
@@ -644,6 +672,13 @@ export default function ChatScreen() {
           onChangeTone={handleChangeTone}
         />
       )}
+
+      {/* Image Picker Modal */}
+      <ImagePickerModal
+        visible={imageModalVisible}
+        onClose={() => setImageModalVisible(false)}
+        onImageSelected={handleImageSelected}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -691,8 +726,22 @@ const styles = StyleSheet.create({
     padding: 8,
     marginLeft: 4,
   },
+  // ✅ TELEGRAM: Timestamp above message groups
+  timestampContainer: {
+    alignItems: 'center',
+    marginVertical: 12,
+  },
+  timestampText: {
+    fontSize: 12,
+    color: colors.textMuted,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
   messagesList: {
     padding: 16,
+    paddingHorizontal: 0,  // ✅ Remove horizontal padding (MessageItemGesture handles it)
     flexGrow: 1,
   },
   messageContainer: {

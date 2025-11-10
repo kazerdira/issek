@@ -136,31 +136,46 @@ class SocketService {
     });
 
     this.socket.on('message_reaction', (data) => {
-      console.log('❤️ Message reaction:', data);
-      const { messages, updateMessage } = useChatStore.getState();
-      const chatMessages = messages[data.chat_id] || [];
-      const message = chatMessages.find(m => m.id === data.message_id);
+      console.log('❤️ Message reaction received:', data);
+      console.log('  → Action:', data.action);
+      console.log('  → Emoji:', data.emoji);
+      console.log('  → User:', data.user_id);
+      console.log('  → Full reactions from backend:', data.reactions);
       
-      if (message) {
-        const reactions = { ...message.reactions };
-        if (data.action === 'add') {
-          if (!reactions[data.emoji]) {
-            reactions[data.emoji] = [];
-          }
-          if (!reactions[data.emoji].includes(data.user_id)) {
-            reactions[data.emoji].push(data.user_id);
-          }
-        } else if (data.action === 'remove') {
-          if (reactions[data.emoji]) {
-            reactions[data.emoji] = reactions[data.emoji].filter(
-              uid => uid !== data.user_id
-            );
-            if (reactions[data.emoji].length === 0) {
-              delete reactions[data.emoji];
+      const { updateMessage } = useChatStore.getState();
+      
+      // Use the full reactions object from backend (source of truth)
+      if (data.reactions !== undefined) {
+        console.log('  → Updating with backend reactions:', data.reactions);
+        updateMessage(data.chat_id, data.message_id, { reactions: data.reactions });
+      } else {
+        // Fallback: manual calculation (shouldn't happen with updated backend)
+        console.warn('  ⚠️ No reactions object from backend, using fallback');
+        const { messages } = useChatStore.getState();
+        const chatMessages = messages[data.chat_id] || [];
+        const message = chatMessages.find(m => m.id === data.message_id);
+        
+        if (message) {
+          const reactions = { ...message.reactions };
+          if (data.action === 'add') {
+            if (!reactions[data.emoji]) {
+              reactions[data.emoji] = [];
+            }
+            if (!reactions[data.emoji].includes(data.user_id)) {
+              reactions[data.emoji].push(data.user_id);
+            }
+          } else if (data.action === 'remove') {
+            if (reactions[data.emoji]) {
+              reactions[data.emoji] = reactions[data.emoji].filter(
+                uid => uid !== data.user_id
+              );
+              if (reactions[data.emoji].length === 0) {
+                delete reactions[data.emoji];
+              }
             }
           }
+          updateMessage(data.chat_id, data.message_id, { reactions });
         }
-        updateMessage(data.chat_id, data.message_id, { reactions });
       }
     });
 
