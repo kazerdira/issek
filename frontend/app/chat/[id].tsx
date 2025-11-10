@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useChatStore, Message } from '../../src/store/chatStore';
@@ -24,7 +23,6 @@ import { MessageItemGesture } from '../../src/components/MessageItemGesture';
 import { MessageActionsSheet } from '../../src/components/MessageActionsSheet';
 import { colors } from '../../src/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
-import { format } from 'date-fns';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Clipboard from 'expo-clipboard';
@@ -458,117 +456,6 @@ export default function ChatScreen() {
           <Ionicons name="close" size={20} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
-    );
-  };
-
-  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
-    const isMe = item.sender_id === user?.id;
-    const showAvatar = !isMe && (index === 0 || chatMessages[index - 1]?.sender_id !== item.sender_id);
-    const messageTime = format(new Date(item.created_at), 'HH:mm');
-
-    const hasReactions = Object.keys(item.reactions).length > 0;
-    const replyToMessage = item.reply_to 
-      ? chatMessages.find(m => m.id === item.reply_to)
-      : null;
-
-    // Check if message is media-only (no text content beyond filename/placeholder)
-    const isMediaOnly = item.media_url && (
-      !item.content || 
-      item.content === 'Media' || 
-      item.content.startsWith('data:') ||
-      item.content.startsWith('http://') ||
-      item.content.startsWith('https://') ||
-      // Check if content looks like a filename (has extension or is very short)
-      /\.(jpg|jpeg|png|gif|webp|mp4|mov|avi|pdf|doc|docx)$/i.test(item.content) ||
-      item.content.length < 50  // Short text likely a filename, not a caption
-    );
-
-    return (
-      <TouchableOpacity
-        onLongPress={() => handleMessageLongPress(item)}
-        style={[styles.messageContainer, isMe ? styles.messageContainerMe : styles.messageContainerOther]}
-      >
-        {showAvatar && !isMe && (
-          <Avatar
-            uri={item.sender?.avatar}
-            name={item.sender?.display_name || 'User'}
-            size={32}
-          />
-        )}
-        {!showAvatar && !isMe && <View style={{ width: 32 }} />}
-        
-        <View style={[
-          styles.messageBubble,
-          !isMediaOnly && (isMe ? styles.messageBubbleMe : styles.messageBubbleOther),
-          isMediaOnly && styles.mediaBubble
-        ]}>
-          {!isMe && showAvatar && !isMediaOnly && (
-            <Text style={styles.senderName}>{item.sender?.display_name}</Text>
-          )}
-          
-          {replyToMessage && (
-            <View style={styles.replyContainer}>
-              <View style={styles.replyIndicator} />
-              <View>
-                <Text style={styles.replyToName}>{replyToMessage.sender?.display_name}</Text>
-                <Text style={styles.replyToText} numberOfLines={1}>{replyToMessage.content}</Text>
-              </View>
-            </View>
-          )}
-
-          {item.media_url && (
-            <Image
-              source={{ uri: item.media_url }}
-              style={styles.messageImage}
-              resizeMode="cover"
-            />
-          )}
-          
-          {/* Only show text if it's not media-only or if message is deleted */}
-          {(!isMediaOnly || item.deleted) && (
-            <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther]}>
-              {item.deleted ? '🚫 This message was deleted' : item.content}
-            </Text>
-          )}
-          
-          {hasReactions && (
-            <View style={styles.reactionsContainer}>
-              {Object.entries(item.reactions).map(([emoji, userIds]) => (
-                <TouchableOpacity
-                  key={emoji}
-                  style={styles.reactionBubble}
-                  onPress={() => handleReaction(item.id, emoji)}
-                >
-                  <Text style={styles.reactionEmoji}>{emoji}</Text>
-                  <Text style={styles.reactionCount}>{userIds.length}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-          
-          <View style={[
-            styles.messageFooter,
-            isMediaOnly && styles.mediaMessageFooter
-          ]}>
-            <Text style={[
-              styles.messageTime, 
-              isMe ? styles.messageTimeMe : styles.messageTimeOther,
-              isMediaOnly && styles.mediaMessageTime
-            ]}>
-              {messageTime}
-              {item.edited && ' (edited)'}
-            </Text>
-            {isMe && (
-              <Ionicons
-                name={item.status === 'read' ? 'checkmark-done' : 'checkmark'}
-                size={14}
-                color={isMediaOnly ? colors.textLight : (item.status === 'read' ? colors.primary : colors.textLight)}
-                style={{ marginLeft: 4 }}
-              />
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
     );
   };
 

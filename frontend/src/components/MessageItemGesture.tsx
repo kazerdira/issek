@@ -26,8 +26,9 @@ interface MessageItemProps {
 }
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
-const SWIPE_THRESHOLD = 70;
+const SWIPE_THRESHOLD = 50;
 const MAX_SWIPE = 100;
+const ICON_START_THRESHOLD = 20;
 
 export const MessageItemGesture: React.FC<MessageItemProps> = ({
   message,
@@ -39,6 +40,7 @@ export const MessageItemGesture: React.FC<MessageItemProps> = ({
   onLongPress,
 }) => {
   const [showReactions, setShowReactions] = useState(false);
+  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
   const translateX = useRef(new Animated.Value(0)).current;
   const replyIconScale = useRef(new Animated.Value(0)).current;
   const replyIconOpacity = useRef(new Animated.Value(0)).current;
@@ -62,58 +64,70 @@ export const MessageItemGesture: React.FC<MessageItemProps> = ({
         translateX.setOffset(0);
       },
       onPanResponderMove: (_, gestureState) => {
-        console.log('👆 Swipe dx:', gestureState.dx, 'isMe:', isMe);
+        const dx = gestureState.dx;
+        const absDx = Math.abs(dx);
         
-        // Swipe RIGHT on other messages for reply
-        // Swipe LEFT on my messages for reactions
-        const direction = isMe ? -1 : 1;
-        const dx = gestureState.dx * direction;
-        
-        if (dx > 0) {
-          const clampedDx = Math.min(dx, MAX_SWIPE);
-          translateX.setValue(clampedDx * direction);
+        // ANY message can be swiped in EITHER direction
+        // Swipe RIGHT (dx > 0) = Reply
+        // Swipe LEFT (dx < 0) = React
+        if (absDx > 10) {
+          const clampedDx = Math.min(absDx, MAX_SWIPE);
           
-          // Animate reply/reaction icon
-          const progress = Math.min(clampedDx / SWIPE_THRESHOLD, 1);
-          replyIconScale.setValue(progress);
-          replyIconOpacity.setValue(progress);
+          // Track swipe direction for icon display
+          setSwipeDirection(dx > 0 ? 'right' : 'left');
+          
+          // Set translation (keep original direction)
+          translateX.setValue(dx > 0 ? clampedDx : -clampedDx);
+          
+          // Show icon starting from ICON_START_THRESHOLD
+          if (absDx >= ICON_START_THRESHOLD) {
+            const progress = Math.min((absDx - ICON_START_THRESHOLD) / (SWIPE_THRESHOLD - ICON_START_THRESHOLD), 1);
+            replyIconScale.setValue(progress);
+            replyIconOpacity.setValue(progress);
+          } else {
+            replyIconScale.setValue(0);
+            replyIconOpacity.setValue(0);
+          }
           
           // Haptic feedback at threshold
-          if (clampedDx >= SWIPE_THRESHOLD && clampedDx < SWIPE_THRESHOLD + 5) {
+          if (absDx >= SWIPE_THRESHOLD && absDx < SWIPE_THRESHOLD + 5) {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           }
         } else {
+          setSwipeDirection(null);
           translateX.setValue(0);
           replyIconScale.setValue(0);
           replyIconOpacity.setValue(0);
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        const direction = isMe ? -1 : 1;
-        const dx = Math.abs(gestureState.dx);
+        const absDx = Math.abs(gestureState.dx);
+        const dx = gestureState.dx;
         
-        if (dx >= SWIPE_THRESHOLD) {
-          console.log('✅ Swipe threshold reached!', isMe ? 'reactions' : 'reply');
-          
-          // Trigger action
-          if (isMe) {
-            setShowReactions(true);
-          } else {
+        if (absDx >= SWIPE_THRESHOLD) {
+          // Trigger action based on swipe direction
+          // RIGHT = Reply, LEFT = React
+          if (dx > 0) {
+            // Swipe RIGHT = Reply
             onReply(message);
+          } else {
+            // Swipe LEFT = React
+            setShowReactions(true);
           }
           
-          // Animate back with bounce
+          // Bounce animation
+          const direction = dx > 0 ? 1 : -1;
           Animated.sequence([
             Animated.timing(translateX, {
-              toValue: (SWIPE_THRESHOLD + 10) * direction,
-              duration: 100,
+              toValue: (SWIPE_THRESHOLD + 15) * direction,
+              duration: 80,
               useNativeDriver: true,
             }),
             Animated.spring(translateX, {
               toValue: 0,
               useNativeDriver: true,
-              tension: 100,
-              friction: 10,
+              tension: 150,
+              friction: 8,
             }),
           ]).start();
           
@@ -129,23 +143,23 @@ export const MessageItemGesture: React.FC<MessageItemProps> = ({
             useNativeDriver: true,
           }).start();
         } else {
-          // Snap back
+          // Snap back faster and smoother
           Animated.spring(translateX, {
             toValue: 0,
             useNativeDriver: true,
-            tension: 100,
-            friction: 10,
+            tension: 150,
+            friction: 8,
           }).start();
           
           Animated.timing(replyIconScale, {
             toValue: 0,
-            duration: 150,
+            duration: 120,
             useNativeDriver: true,
           }).start();
           
           Animated.timing(replyIconOpacity, {
             toValue: 0,
-            duration: 150,
+            duration: 120,
             useNativeDriver: true,
           }).start();
         }
@@ -159,30 +173,53 @@ export const MessageItemGesture: React.FC<MessageItemProps> = ({
   };
 
   return (
-    <View style={[styles.container, isMe ? styles.containerMe : styles.containerOther]}>
-      {/* Reply/React Icon - positioned behind the message */}
-      <Animated.View
-        style={[
-          styles.replyIconContainer,
-          isMe ? styles.replyIconRight : styles.replyIconLeft,
-          {
-            opacity: replyIconOpacity,
-            transform: [{ scale: replyIconScale }],
-          },
-        ]}
-      >
-        <Ionicons 
-          name={isMe ? "happy" : "arrow-undo"} 
-          size={24} 
-          color={isMe ? colors.warning : colors.primary} 
-        />
-      </Animated.View>
+    <View style={styles.container}>
+      {/* Reply Icon (RIGHT swipe) */}
+      {swipeDirection === 'right' && (
+        <Animated.View
+          style={[
+            styles.replyIconContainer,
+            styles.replyIconLeft,
+            {
+              opacity: replyIconOpacity,
+              transform: [{ scale: replyIconScale }],
+            },
+          ]}
+        >
+          <Ionicons 
+            name="arrow-undo" 
+            size={24} 
+            color={colors.primary} 
+          />
+        </Animated.View>
+      )}
+
+      {/* React Icon (LEFT swipe) */}
+      {swipeDirection === 'left' && (
+        <Animated.View
+          style={[
+            styles.replyIconContainer,
+            styles.replyIconRight,
+            {
+              opacity: replyIconOpacity,
+              transform: [{ scale: replyIconScale }],
+            },
+          ]}
+        >
+          <Ionicons 
+            name="happy" 
+            size={24} 
+            color={colors.warning} 
+          />
+        </Animated.View>
+      )}
 
       {/* Message Content with Gesture */}
       <View style={styles.gestureContainer} {...panResponder.panHandlers}>
         <Animated.View
           style={[
             styles.messageWrapper,
+            isMe ? styles.messageWrapperMe : styles.messageWrapperOther,
             { transform: [{ translateX }] },
           ]}
         >
@@ -213,32 +250,50 @@ export const MessageItemGesture: React.FC<MessageItemProps> = ({
                   {message.media_url && (
                     <Image 
                       source={{ uri: message.media_url }}
-                      style={styles.messageImage}
+                      style={[
+                        styles.messageImage,
+                        !message.content && styles.mediaOnlyImage
+                      ]}
                       resizeMode="cover"
                     />
                   )}
 
                   {message.content && (
-                    <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther]}>
+                    <Text style={[
+                      styles.messageText, 
+                      isMe ? styles.messageTextMe : styles.messageTextOther,
+                      message.media_url && styles.messageTextWithMedia
+                    ]}>
                       {message.content}
                     </Text>
                   )}
+
+                  <View style={[
+                    styles.messageFooter,
+                    !message.content && message.media_url && styles.mediaOnlyFooter
+                  ]}>
+                    <Text style={[
+                      styles.messageTime, 
+                      isMe ? styles.messageTimeMe : styles.messageTimeOther,
+                      !message.content && message.media_url && styles.mediaOnlyTime
+                    ]}>
+                      {messageTime}
+                    </Text>
+                    {isMe && (
+                      <Ionicons
+                        name={message.status === 'read' ? 'checkmark-done' : 'checkmark'}
+                        size={14}
+                        color={
+                          !message.content && message.media_url 
+                            ? colors.textLight 
+                            : (message.status === 'read' ? colors.primary : colors.textLight)
+                        }
+                        style={{ marginLeft: 4 }}
+                      />
+                    )}
+                  </View>
                 </>
               )}
-
-              <View style={styles.messageFooter}>
-                <Text style={[styles.messageTime, isMe ? styles.messageTimeMe : styles.messageTimeOther]}>
-                  {messageTime}
-                </Text>
-                {isMe && (
-                  <Ionicons
-                    name={message.status === 'read' ? 'checkmark-done' : 'checkmark'}
-                    size={14}
-                    color={message.status === 'read' ? colors.primary : colors.textLight}
-                    style={{ marginLeft: 4 }}
-                  />
-                )}
-              </View>
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -272,12 +327,7 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: 12,
     position: 'relative',
-  },
-  containerMe: {
-    alignItems: 'flex-end',
-  },
-  containerOther: {
-    alignItems: 'flex-start',
+    width: '100%',
   },
   replyIconContainer: {
     position: 'absolute',
@@ -296,14 +346,20 @@ const styles = StyleSheet.create({
   },
   messageWrapper: {
     zIndex: 1,
+    paddingHorizontal: 8,
+  },
+  messageWrapperMe: {
+    alignSelf: 'flex-end',
+  },
+  messageWrapperOther: {
+    alignSelf: 'flex-start',
   },
   messageRow: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
     alignItems: 'flex-end',
   },
   messageBubble: {
-    maxWidth: '70%',
+    maxWidth: '75%',
     borderRadius: 18,
     padding: 12,
     marginLeft: 8,
@@ -321,14 +377,21 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   messageImage: {
-    width: 250,
-    height: 250,
+    width: 220,
+    height: 220,
     borderRadius: 12,
-    marginBottom: 4,
+    marginBottom: 8,
+  },
+  mediaOnlyImage: {
+    marginBottom: 0,
+    borderRadius: 18,
   },
   messageText: {
     fontSize: 16,
     lineHeight: 22,
+  },
+  messageTextWithMedia: {
+    marginTop: 4,
   },
   messageTextMe: {
     color: colors.textLight,
@@ -346,6 +409,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
     justifyContent: 'flex-end',
   },
+  mediaOnlyFooter: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
   messageTime: {
     fontSize: 11,
   },
@@ -354,6 +426,9 @@ const styles = StyleSheet.create({
   },
   messageTimeOther: {
     color: colors.textMuted,
+  },
+  mediaOnlyTime: {
+    color: colors.textLight,
   },
   quickReactionsContainer: {
     position: 'absolute',
