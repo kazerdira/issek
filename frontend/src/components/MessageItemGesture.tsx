@@ -1,14 +1,13 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  interpolate,
-  interpolateColor,
-  runOnJS,
-} from 'react-native-reanimated';
+import React, { useState, useRef } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  Image,
+  Animated,
+  PanResponder,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { Avatar } from './Avatar';
@@ -27,7 +26,7 @@ interface MessageItemProps {
 }
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
-const SWIPE_THRESHOLD = 50;
+const SWIPE_THRESHOLD = 70;
 const MAX_SWIPE = 100;
 
 export const MessageItemGesture: React.FC<MessageItemProps> = ({
@@ -39,97 +38,120 @@ export const MessageItemGesture: React.FC<MessageItemProps> = ({
   onDelete,
   onLongPress,
 }) => {
-  console.log('🎯 MessageItemGesture (Gesture Handler) rendering:', message.id.substring(0, 8));
-  
   const [showReactions, setShowReactions] = useState(false);
-  const translateX = useSharedValue(0);
+  const translateX = useRef(new Animated.Value(0)).current;
+  const replyIconScale = useRef(new Animated.Value(0)).current;
+  const replyIconOpacity = useRef(new Animated.Value(0)).current;
   const messageTime = format(new Date(message.created_at), 'HH:mm');
 
-  const triggerHaptic = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  };
-
-  const triggerReply = () => {
-    onReply(message);
-  };
-
-  const triggerReactions = () => {
-    setShowReactions(true);
-  };
-
-  // Pan gesture for swipe
-  const panGesture = Gesture.Pan()
-    .onUpdate((event) => {
-      if (isMe) {
-        // Swipe left for reactions
-        if (event.translationX < 0) {
-          translateX.value = Math.max(event.translationX, -MAX_SWIPE);
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        console.log('🔥 Move check - dx:', gestureState.dx, 'dy:', gestureState.dy);
+        // Only activate swipe for horizontal movement
+        return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        // Capture horizontal swipes before TouchableOpacity
+        return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      },
+      onPanResponderGrant: () => {
+        console.log('✅ PanResponder granted!');
+        translateX.setOffset(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        console.log('👆 Swipe dx:', gestureState.dx, 'isMe:', isMe);
+        
+        // Swipe RIGHT on other messages for reply
+        // Swipe LEFT on my messages for reactions
+        const direction = isMe ? -1 : 1;
+        const dx = gestureState.dx * direction;
+        
+        if (dx > 0) {
+          const clampedDx = Math.min(dx, MAX_SWIPE);
+          translateX.setValue(clampedDx * direction);
           
-          // Haptic at threshold
-          if (Math.abs(event.translationX) > SWIPE_THRESHOLD && Math.abs(event.translationX) < SWIPE_THRESHOLD + 10) {
-            runOnJS(triggerHaptic)();
-          }
-        }
-      } else {
-        // Swipe right for reply
-        if (event.translationX > 0) {
-          translateX.value = Math.min(event.translationX, MAX_SWIPE);
+          // Animate reply/reaction icon
+          const progress = Math.min(clampedDx / SWIPE_THRESHOLD, 1);
+          replyIconScale.setValue(progress);
+          replyIconOpacity.setValue(progress);
           
-          // Haptic at threshold
-          if (event.translationX > SWIPE_THRESHOLD && event.translationX < SWIPE_THRESHOLD + 10) {
-            runOnJS(triggerHaptic)();
+          // Haptic feedback at threshold
+          if (clampedDx >= SWIPE_THRESHOLD && clampedDx < SWIPE_THRESHOLD + 5) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           }
+        } else {
+          translateX.setValue(0);
+          replyIconScale.setValue(0);
+          replyIconOpacity.setValue(0);
         }
-      }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const direction = isMe ? -1 : 1;
+        const dx = Math.abs(gestureState.dx);
+        
+        if (dx >= SWIPE_THRESHOLD) {
+          console.log('✅ Swipe threshold reached!', isMe ? 'reactions' : 'reply');
+          
+          // Trigger action
+          if (isMe) {
+            setShowReactions(true);
+          } else {
+            onReply(message);
+          }
+          
+          // Animate back with bounce
+          Animated.sequence([
+            Animated.timing(translateX, {
+              toValue: (SWIPE_THRESHOLD + 10) * direction,
+              duration: 100,
+              useNativeDriver: true,
+            }),
+            Animated.spring(translateX, {
+              toValue: 0,
+              useNativeDriver: true,
+              tension: 100,
+              friction: 10,
+            }),
+          ]).start();
+          
+          Animated.timing(replyIconScale, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+          }).start();
+          
+          Animated.timing(replyIconOpacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+          }).start();
+        } else {
+          // Snap back
+          Animated.spring(translateX, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 100,
+            friction: 10,
+          }).start();
+          
+          Animated.timing(replyIconScale, {
+            toValue: 0,
+            duration: 150,
+            useNativeDriver: true,
+          }).start();
+          
+          Animated.timing(replyIconOpacity, {
+            toValue: 0,
+            duration: 150,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
     })
-    .onEnd((event) => {
-      if (isMe && event.translationX < -SWIPE_THRESHOLD) {
-        // Trigger reactions
-        runOnJS(triggerReactions)();
-      } else if (!isMe && event.translationX > SWIPE_THRESHOLD) {
-        // Trigger reply
-        runOnJS(triggerReply)();
-      }
-      
-      // Animate back
-      translateX.value = withSpring(0);
-    });
-
-  // Animated styles
-  const animatedStyle = useAnimatedStyle(() => {
-    const backgroundColor = isMe
-      ? interpolateColor(
-          translateX.value,
-          [-MAX_SWIPE, 0],
-          ['rgba(255, 235, 59, 0.3)', 'transparent']
-        )
-      : interpolateColor(
-          translateX.value,
-          [0, MAX_SWIPE],
-          ['transparent', 'rgba(33, 150, 243, 0.3)']
-        );
-
-    return {
-      transform: [{ translateX: translateX.value }],
-      backgroundColor,
-    };
-  });
-
-  const iconOpacity = useAnimatedStyle(() => {
-    const opacity = isMe
-      ? interpolate(
-          translateX.value,
-          [-MAX_SWIPE, -SWIPE_THRESHOLD, 0],
-          [1, 0.5, 0]
-        )
-      : interpolate(
-          translateX.value,
-          [0, SWIPE_THRESHOLD, MAX_SWIPE],
-          [0, 0.5, 1]
-        );
-
-    return { opacity };
-  });
+  ).current;
 
   const handleReaction = (emoji: string) => {
     onReact(message, emoji);
@@ -138,35 +160,46 @@ export const MessageItemGesture: React.FC<MessageItemProps> = ({
 
   return (
     <View style={[styles.container, isMe ? styles.containerMe : styles.containerOther]}>
-      {/* Swipe Icons */}
-      {!isMe && (
-        <Animated.View style={[styles.swipeIconLeft, iconOpacity]}>
-          <Ionicons name="arrow-undo" size={24} color={colors.primary} />
-        </Animated.View>
-      )}
+      {/* Reply/React Icon - positioned behind the message */}
+      <Animated.View
+        style={[
+          styles.replyIconContainer,
+          isMe ? styles.replyIconRight : styles.replyIconLeft,
+          {
+            opacity: replyIconOpacity,
+            transform: [{ scale: replyIconScale }],
+          },
+        ]}
+      >
+        <Ionicons 
+          name={isMe ? "happy" : "arrow-undo"} 
+          size={24} 
+          color={isMe ? colors.warning : colors.primary} 
+        />
+      </Animated.View>
 
-      {isMe && (
-        <Animated.View style={[styles.swipeIconRight, iconOpacity]}>
-          <Ionicons name="happy" size={24} color={colors.warning} />
-        </Animated.View>
-      )}
-
-      <GestureDetector gesture={panGesture}>
-        <Animated.View style={[styles.messageWrapper, animatedStyle]}>
+      {/* Message Content with Gesture */}
+      <View style={styles.gestureContainer} {...panResponder.panHandlers}>
+        <Animated.View
+          style={[
+            styles.messageWrapper,
+            { transform: [{ translateX }] },
+          ]}
+        >
           <View style={styles.messageRow}>
-            {showAvatar && !isMe && (
-              <Avatar uri={message.sender?.avatar} name={message.sender?.display_name || 'User'} size={32} />
-            )}
-            {!showAvatar && !isMe && <View style={{ width: 32 }} />}
+              {showAvatar && !isMe && (
+                <Avatar uri={message.sender?.avatar} name={message.sender?.display_name || 'User'} size={32} />
+              )}
+              {!showAvatar && !isMe && <View style={{ width: 32 }} />}
 
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onLongPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-                onLongPress(message);
-              }}
-              style={[styles.messageBubble, isMe ? styles.messageBubbleMe : styles.messageBubbleOther]}
-            >
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onLongPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                  onLongPress(message);
+                }}
+                style={[styles.messageBubble, isMe ? styles.messageBubbleMe : styles.messageBubbleOther]}
+              >
               {!isMe && showAvatar && (
                 <Text style={styles.senderName}>{message.sender?.display_name}</Text>
               )}
@@ -209,7 +242,7 @@ export const MessageItemGesture: React.FC<MessageItemProps> = ({
             </TouchableOpacity>
           </View>
         </Animated.View>
-      </GestureDetector>
+      </View>
 
       {/* Quick Reactions Popup */}
       {showReactions && (
@@ -246,22 +279,23 @@ const styles = StyleSheet.create({
   containerOther: {
     alignItems: 'flex-start',
   },
-  swipeIconLeft: {
+  replyIconContainer: {
     position: 'absolute',
-    left: 16,
     top: '50%',
     marginTop: -12,
-    zIndex: 1,
+    zIndex: 0,
   },
-  swipeIconRight: {
-    position: 'absolute',
-    right: 16,
-    top: '50%',
-    marginTop: -12,
-    zIndex: 1,
+  replyIconLeft: {
+    left: 8,
+  },
+  replyIconRight: {
+    right: 8,
+  },
+  gestureContainer: {
+    width: '100%',
   },
   messageWrapper: {
-    width: '100%',
+    zIndex: 1,
   },
   messageRow: {
     flexDirection: 'row',

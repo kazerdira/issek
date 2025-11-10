@@ -112,6 +112,7 @@ class Message(MessageBase):
     reactions: Dict[str, List[str]] = {}  # {emoji: [user_ids]}
     edited: bool = False
     deleted: bool = False
+    deleted_for: List[str] = []  # user IDs who deleted this message (for "delete for me")
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

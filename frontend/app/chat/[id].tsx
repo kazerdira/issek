@@ -20,11 +20,14 @@ import { chatsAPI } from '../../src/services/api';
 import { socketService } from '../../src/services/socket';
 import { Avatar } from '../../src/components/Avatar';
 import { TypingIndicator } from '../../src/components/TypingIndicator';
+import { MessageItemGesture } from '../../src/components/MessageItemGesture';
+import { MessageActionsSheet } from '../../src/components/MessageActionsSheet';
 import { colors } from '../../src/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import * as Clipboard from 'expo-clipboard';
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -39,7 +42,9 @@ export default function ChatScreen() {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [showReactions, setShowReactions] = useState(false);
+  const [showActionsSheet, setShowActionsSheet] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const messageInputRef = useRef<TextInput>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const sendingRef = useRef(false); // Synchronous lock to prevent race conditions
 
@@ -100,12 +105,18 @@ export default function ChatScreen() {
     try {
       console.log('Loading messages for chat:', chatId);
       const response = await chatsAPI.getMessages(chatId);
-      setMessages(chatId, response.data);
-      console.log(`Loaded ${response.data.length} messages`);
+      
+      // Filter out messages deleted by current user ("delete for me")
+      const filteredMessages = user 
+        ? response.data.filter((msg: any) => !msg.deleted_for?.includes(user.id))
+        : response.data;
+      
+      setMessages(chatId, filteredMessages);
+      console.log(`Loaded ${filteredMessages.length} messages (${response.data.length - filteredMessages.length} hidden)`);
       
       // Mark all unread messages as read
       if (user) {
-        const unreadMessages = response.data.filter(
+        const unreadMessages = filteredMessages.filter(
           (msg: Message) => msg.sender_id !== user.id && msg.status !== 'read'
         );
         
@@ -292,40 +303,75 @@ export default function ChatScreen() {
     }
   };
 
-  const handleLongPress = (message: Message) => {
-    if (message.sender_id !== user?.id) return;
-    
-    Alert.alert(
-      'Message Options',
-      '',
-      [
-        {
-          text: 'Reply',
-          onPress: () => setReplyTo(message),
-        },
-        {
-          text: 'React',
-          onPress: () => {
-            setSelectedMessage(message);
-            setShowReactions(true);
-          },
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => handleDeleteMessage(message.id),
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-      ]
-    );
+  // New gesture handlers
+  const handleReply = (message: Message) => {
+    setReplyTo(message);
+    messageInputRef.current?.focus();
+  };
+
+  const handleReact = async (message: Message, emoji: string) => {
+    try {
+      await chatsAPI.addReaction(message.id, emoji);
+    } catch (error) {
+      console.error('Error adding reaction:', error);
+      Alert.alert('Error', 'Failed to add reaction');
+    }
+  };
+
+  const handleDelete = async (message: Message, forEveryone: boolean) => {
+    try {
+      await chatsAPI.deleteMessage(message.id, forEveryone);
+      // Message will be updated via socket
+    } catch (error: any) {
+      console.error('Error deleting message:', error);
+      const errorMessage = error.response?.data?.detail || 'Failed to delete message';
+      Alert.alert('Error', errorMessage);
+    }
+  };
+
+  const handleMessageLongPress = (message: Message) => {
+    setSelectedMessage(message);
+    setShowActionsSheet(true);
+  };
+
+  const handleCopy = async (message: Message) => {
+    try {
+      await Clipboard.setStringAsync(message.content);
+      Alert.alert('Copied', 'Message copied to clipboard');
+      setShowActionsSheet(false);
+    } catch (error) {
+      console.error('Error copying message:', error);
+      Alert.alert('Error', 'Failed to copy message');
+    }
+  };
+
+  const handleForward = (message: Message) => {
+    // TODO: Implement forward functionality
+    Alert.alert('Forward', 'Forward functionality coming soon!');
+    setShowActionsSheet(false);
+  };
+
+  const handleEdit = (message: Message) => {
+    // TODO: Implement edit functionality
+    Alert.alert('Edit', 'Edit functionality coming soon!');
+    setShowActionsSheet(false);
+  };
+
+  const handleScheduleReminder = (minutes: number) => {
+    // TODO: Implement reminder functionality
+    Alert.alert('Reminder', `Reminder set for ${minutes} minutes - coming soon!`);
+    setShowActionsSheet(false);
+  };
+
+  const handleChangeTone = (tone: string) => {
+    // TODO: Implement tone change (requires AI)
+    Alert.alert('Change Tone', `Change to ${tone} tone - coming soon!`);
+    setShowActionsSheet(false);
   };
 
   const handleDeleteMessage = async (messageId: string) => {
     try {
-      await chatsAPI.deleteMessage(messageId, true);
+      await chatsAPI.deleteMessage(messageId);
     } catch (error) {
       console.error('Error deleting message:', error);
       Alert.alert('Error', 'Failed to delete message');
@@ -439,7 +485,7 @@ export default function ChatScreen() {
 
     return (
       <TouchableOpacity
-        onLongPress={() => handleLongPress(item)}
+        onLongPress={() => handleMessageLongPress(item)}
         style={[styles.messageContainer, isMe ? styles.messageContainerMe : styles.messageContainerOther]}
       >
         {showAvatar && !isMe && (
@@ -578,7 +624,22 @@ export default function ChatScreen() {
       <FlatList
         ref={flatListRef}
         data={chatMessages}
-        renderItem={renderMessage}
+        renderItem={({ item, index }) => {
+          const isMe = item.sender_id === user?.id;
+          const showAvatar = !isMe && (index === 0 || chatMessages[index - 1]?.sender_id !== item.sender_id);
+          
+          return (
+            <MessageItemGesture
+              message={item}
+              isMe={isMe}
+              showAvatar={showAvatar}
+              onReply={handleReply}
+              onReact={handleReact}
+              onDelete={handleDelete}
+              onLongPress={handleMessageLongPress}
+            />
+          );
+        }}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messagesList}
         ListFooterComponent={renderTypingIndicator}
@@ -667,6 +728,35 @@ export default function ChatScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Message Actions Sheet */}
+      {selectedMessage && (
+        <MessageActionsSheet
+          visible={showActionsSheet}
+          message={selectedMessage}
+          isMe={selectedMessage.sender_id === user?.id}
+          onClose={() => setShowActionsSheet(false)}
+          onReply={() => {
+            handleReply(selectedMessage);
+            setShowActionsSheet(false);
+          }}
+          onEdit={() => {
+            handleEdit(selectedMessage);
+          }}
+          onDelete={(forEveryone: boolean) => {
+            handleDelete(selectedMessage, forEveryone);
+            setShowActionsSheet(false);
+          }}
+          onCopy={() => {
+            handleCopy(selectedMessage);
+          }}
+          onForward={() => {
+            handleForward(selectedMessage);
+          }}
+          onScheduleReminder={handleScheduleReminder}
+          onChangeTone={handleChangeTone}
+        />
+      )}
     </KeyboardAvoidingView>
   );
 }
