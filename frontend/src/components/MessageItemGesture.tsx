@@ -619,11 +619,12 @@ const styles = StyleSheet.create({
   },
   quickReactionsContainer: {
     position: 'absolute',
-    bottom: -40,
+    bottom: -35,
     flexDirection: 'row',
     backgroundColor: 'white',
-    borderRadius: 25,
-    padding: 8,
+    borderRadius: 20,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
@@ -638,9 +639,12 @@ const styles = StyleSheet.create({
     left: 40,
   },
   quickReactionButton: {
-    padding: 8,
-    marginHorizontal: 2,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 1,
+    borderRadius: 18,
     backgroundColor: 'transparent',
   },
   quickReactionButtonActive: {
@@ -648,7 +652,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.1 }],
   },
   quickReactionEmoji: {
-    fontSize: 24,
+    fontSize: 20,
   },
   // Reaction Display Badges - ✅ TELEGRAM: Stick to bubble
   reactionsDisplay: {

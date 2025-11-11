@@ -214,7 +214,14 @@ async def get_messages(
     senders_list = await db.users.find({"id": {"$in": sender_ids}}).to_list(None)
     senders_map = {user['id']: user for user in senders_list}
     
-    # Add sender details to each message
+    # Batch fetch replied messages (for reply previews)
+    reply_ids = [msg.get('reply_to') for msg in messages if msg.get('reply_to')]
+    replied_messages_map = {}
+    if reply_ids:
+        replied_messages = await db.messages.find({"id": {"$in": reply_ids}}).to_list(None)
+        replied_messages_map = {msg['id']: msg for msg in replied_messages}
+    
+    # Add sender details and replied message to each message
     result = []
     for msg in messages:
         sender = senders_map.get(msg['sender_id'])
@@ -236,6 +243,31 @@ async def get_messages(
         
         msg_response = MessageResponse(**msg)
         msg_response.sender = sender_response
+        
+        # Add replied message data if this is a reply
+        if msg.get('reply_to') and msg['reply_to'] in replied_messages_map:
+            replied_msg = replied_messages_map[msg['reply_to']]
+            replied_sender = senders_map.get(replied_msg['sender_id'])
+            replied_sender_response = None
+            if replied_sender:
+                replied_sender_response = UserResponse(
+                    id=replied_sender['id'],
+                    username=replied_sender['username'],
+                    display_name=replied_sender['display_name'],
+                    avatar=replied_sender.get('avatar'),
+                    bio=replied_sender.get('bio'),
+                    phone_number=replied_sender.get('phone_number'),
+                    email=replied_sender.get('email'),
+                    role=replied_sender.get('role', 'regular'),
+                    is_online=replied_sender.get('is_online', False),
+                    last_seen=replied_sender.get('last_seen'),
+                    created_at=replied_sender['created_at']
+                )
+            
+            replied_msg_response = MessageResponse(**replied_msg)
+            replied_msg_response.sender = replied_sender_response
+            msg_response.reply_to_message = replied_msg_response
+        
         result.append(msg_response)
     
     return result
@@ -405,7 +437,7 @@ async def add_reaction(
     reaction_data: ReactionCreate,
     current_user: dict = Depends(get_current_user)
 ):
-    """Add reaction to a message"""
+    """Add or update reaction to a message (only one reaction per user)"""
     message = await get_message_by_id(message_id)
     
     if not message:
@@ -414,27 +446,64 @@ async def add_reaction(
             detail="Message not found"
         )
     
-    # Update reactions
+    # Get current reactions
     reactions = message.get('reactions', {})
     emoji = reaction_data.emoji
+    user_id = current_user['id']
     
+    # Check if user already has this exact emoji (toggle off)
+    user_has_this_emoji = emoji in reactions and user_id in reactions[emoji]
+    
+    # Remove user's existing reaction if any
+    removed_emoji = None
+    for existing_emoji, users in list(reactions.items()):
+        if user_id in users:
+            users.remove(user_id)
+            removed_emoji = existing_emoji
+            if not users:
+                del reactions[existing_emoji]
+            
+            # Broadcast removal of old reaction
+            await socket_manager.broadcast_reaction(message['chat_id'], {
+                'message_id': message_id,
+                'emoji': existing_emoji,
+                'user_id': user_id,
+                'action': 'remove',
+                'reactions': reactions,
+                'chat_id': message['chat_id']
+            })
+            print(f"🗑️ Removed reaction {existing_emoji} from user {user_id}")
+            break
+    
+    # If user clicked the same emoji they already had, just remove it (toggle off)
+    if user_has_this_emoji:
+        await update_message(message_id, {'reactions': reactions})
+        print(f"✅ Toggled OFF reaction {emoji} for user {user_id}")
+        return {"message": "Reaction removed", "reactions": reactions}
+    
+    # Add new reaction (only if it wasn't a toggle-off)
     if emoji not in reactions:
         reactions[emoji] = []
     
-    if current_user['id'] not in reactions[emoji]:
-        reactions[emoji].append(current_user['id'])
+    if user_id not in reactions[emoji]:
+        reactions[emoji].append(user_id)
     
+    # Update message
     await update_message(message_id, {'reactions': reactions})
     
-    # Broadcast reaction
+    print(f"✅ Added reaction {emoji} for user {user_id}")
+    
+    # Broadcast new reaction
     await socket_manager.broadcast_reaction(message['chat_id'], {
         'message_id': message_id,
         'emoji': emoji,
-        'user_id': current_user['id'],
-        'action': 'add'
+        'user_id': user_id,
+        'action': 'add',
+        'reactions': reactions,
+        'chat_id': message['chat_id']
     })
     
-    return {"message": "Reaction added"}
+    return {"message": "Reaction added", "reactions": reactions}
 
 @router.delete("/messages/{message_id}/react")
 async def remove_reaction(
@@ -466,10 +535,12 @@ async def remove_reaction(
         'message_id': message_id,
         'emoji': emoji,
         'user_id': current_user['id'],
-        'action': 'remove'
+        'action': 'remove',
+        'reactions': reactions,
+        'chat_id': message['chat_id']
     })
     
-    return {"message": "Reaction removed"}
+    return {"message": "Reaction removed", "reactions": reactions}
 
 @router.post("/messages/{message_id}/read")
 async def mark_as_read(

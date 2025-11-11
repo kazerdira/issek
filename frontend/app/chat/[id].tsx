@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Keyboard,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useChatStore, Message } from '../../src/store/chatStore';
@@ -36,9 +37,9 @@ const shouldShowTimestamp = (currentMsg: Message, prevMsg: Message | null): bool
   const currentTime = new Date(currentMsg.created_at);
   const prevTime = new Date(prevMsg.created_at);
   
-  // Show timestamp if messages are more than 5 minutes apart
+  // Show timestamp if messages are more than 10 minutes apart
   const diffMinutes = (currentTime.getTime() - prevTime.getTime()) / (1000 * 60);
-  return diffMinutes > 5;
+  return diffMinutes > 10;
 };
 
 export default function ChatScreen() {
@@ -102,6 +103,22 @@ export default function ChatScreen() {
       }, 100);
     }
   }, [chatMessages.length]);
+
+  // ✅ Keyboard listener to scroll FlatList when keyboard appears
+  useEffect(() => {
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    );
+
+    return () => {
+      keyboardWillShow.remove();
+    };
+  }, []);
 
   const loadChat = async () => {
     try {
@@ -488,8 +505,8 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={90}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       {/* Header */}
       <View style={styles.header}>
@@ -526,6 +543,7 @@ export default function ChatScreen() {
       {/* Messages */}
       <FlatList
         ref={flatListRef}
+        style={styles.flatList}
         data={chatMessages}
         renderItem={({ item, index }) => {
           const isMe = item.sender_id === user?.id;
@@ -592,10 +610,16 @@ export default function ChatScreen() {
         </TouchableOpacity>
         
         <TextInput
+          ref={messageInputRef}
           style={styles.input}
           placeholder="Type a message..."
           value={inputText}
           onChangeText={handleTyping}
+          onFocus={() => {
+            setTimeout(() => {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }, 300);
+          }}
           multiline
           maxLength={1000}
         />
@@ -702,6 +726,9 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     backgroundColor: colors.primary,
   },
+  flatList: {
+    flex: 1,
+  },
   backButton: {
     padding: 8,
   },
@@ -743,7 +770,6 @@ const styles = StyleSheet.create({
   messagesList: {
     padding: 16,
     paddingHorizontal: 0,  // ✅ Remove horizontal padding (MessageItemGesture handles it)
-    flexGrow: 1,
   },
   messageContainer: {
     flexDirection: 'row',
@@ -957,20 +983,26 @@ const styles = StyleSheet.create({
   reactionsModal: {
     flexDirection: 'row',
     backgroundColor: colors.card,
-    borderRadius: 24,
-    padding: 12,
-    gap: 8,
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
   },
   reactionButton: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 24,
+    borderRadius: 20,
     backgroundColor: colors.surface,
   },
   reactionButtonText: {
-    fontSize: 24,
+    fontSize: 22,
   },
   typingContainer: {
     flexDirection: 'row',
