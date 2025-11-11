@@ -23,6 +23,9 @@ import { TypingIndicator } from '../../src/components/TypingIndicator';
 import { MessageItemGesture } from '../../src/components/MessageItemGesture';
 import { MessageActionsSheet } from '../../src/components/MessageActionsSheet';
 import { ImagePickerModal } from '../../src/components/ImagePickerModal';
+import { VoiceRecorder } from '../../src/components/VoiceRecorder';
+import { VoiceMessageBubble } from '../../src/components/VoiceMessageBubble';
+import { uploadVoiceMessage } from '../../src/services/voiceService';
 import { colors } from '../../src/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -57,6 +60,7 @@ export default function ChatScreen() {
   const [showReactions, setShowReactions] = useState(false);
   const [showActionsSheet, setShowActionsSheet] = useState(false);
   const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const messageInputRef = useRef<TextInput>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -283,6 +287,59 @@ export default function ChatScreen() {
     } catch (error) {
       console.error('Error picking document:', error);
     }
+  };
+
+  // ✅ Voice Recording Handlers
+  const handleStartRecording = () => {
+    setIsRecordingVoice(true);
+  };
+
+  const handleVoiceSend = async (uri: string, duration: number) => {
+    setIsRecordingVoice(false);
+    
+    if (!user) return;
+
+    try {
+      setSending(true);
+      
+      // Upload voice message
+      console.log('Uploading voice message...');
+      const { mediaUrl } = await uploadVoiceMessage(uri, chatId);
+      
+      // Send message with voice media
+      const response = await chatsAPI.sendMessage(chatId, {
+        chat_id: chatId,
+        sender_id: user.id,
+        content: '', // No text content for voice messages
+        message_type: 'voice',
+        media_url: mediaUrl,
+        media_metadata: {
+          duration: duration,
+        },
+      });
+
+      console.log('Voice message sent successfully');
+      
+      // Add message locally
+      const existingMessage = chatMessages.find(m => m.id === response.data.id);
+      if (!existingMessage) {
+        addMessage(chatId, response.data);
+      }
+      
+      // Scroll to end
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error) {
+      console.error('Error sending voice message:', error);
+      Alert.alert('Error', 'Failed to send voice message');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleVoiceCancel = () => {
+    setIsRecordingVoice(false);
   };
 
   const sendMediaMessage = async (asset: any) => {
@@ -569,18 +626,34 @@ export default function ChatScreen() {
                 </View>
               )}
               
-              <MessageItemGesture
-                message={item}
-                isMe={isMe}
-                showAvatar={showAvatar}
-                userId={user?.id}
-                participantDetails={currentChat?.participant_details || []}
-                repliedToMessage={repliedToMessage}
-                onReply={handleReply}
-                onReact={handleReact}
-                onDelete={handleDelete}
-                onLongPress={handleMessageLongPress}
-              />
+              {/* Render Voice Message or Regular Message */}
+              {item.message_type === 'voice' ? (
+                <View style={[
+                  styles.voiceMessageContainer,
+                  isMe ? styles.voiceMessageMe : styles.voiceMessageOther
+                ]}>
+                  <VoiceMessageBubble
+                    mediaUrl={item.media_url || ''}
+                    duration={item.media_metadata?.duration || 0}
+                    isMe={isMe}
+                    messageTime={format(new Date(item.created_at), 'HH:mm')}
+                    status={item.status as any}
+                  />
+                </View>
+              ) : (
+                <MessageItemGesture
+                  message={item}
+                  isMe={isMe}
+                  showAvatar={showAvatar}
+                  userId={user?.id}
+                  participantDetails={currentChat?.participant_details || []}
+                  repliedToMessage={repliedToMessage}
+                  onReply={handleReply}
+                  onReact={handleReact}
+                  onDelete={handleDelete}
+                  onLongPress={handleMessageLongPress}
+                />
+              )}
             </>
           );
         }}
@@ -637,11 +710,22 @@ export default function ChatScreen() {
             )}
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={styles.inputAction}>
+          <TouchableOpacity 
+            style={styles.inputAction}
+            onPress={handleStartRecording}
+          >
             <Ionicons name="mic" size={24} color={colors.primary} />
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Voice Recorder */}
+      {isRecordingVoice && (
+        <VoiceRecorder
+          onSend={handleVoiceSend}
+          onCancel={handleVoiceCancel}
+        />
+      )}
 
       {/* Reaction Modal */}
       <Modal
@@ -1003,6 +1087,16 @@ const styles = StyleSheet.create({
   },
   reactionButtonText: {
     fontSize: 22,
+  },
+  voiceMessageContainer: {
+    marginBottom: 8,
+    paddingHorizontal: 16,
+  },
+  voiceMessageMe: {
+    alignItems: 'flex-end',
+  },
+  voiceMessageOther: {
+    alignItems: 'flex-start',
   },
   typingContainer: {
     flexDirection: 'row',

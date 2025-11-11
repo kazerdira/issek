@@ -27,7 +27,8 @@
         "WRITE_EXTERNAL_STORAGE",
         "CAMERA",
         "READ_MEDIA_IMAGES",
-        "READ_MEDIA_VIDEO"
+        "READ_MEDIA_VIDEO",
+        "RECORD_AUDIO"
       ]
     },
     "web": {

@@ -31,6 +31,7 @@ from socket_manager import socket_manager
 from routes_auth import router as auth_router
 from routes_chat import router as chat_router
 from routes_users import router as users_router
+from routes_media import router as media_router
 
 # Create the main app
 app = FastAPI(title="ChatApp API", version="1.0.0")
@@ -55,6 +56,7 @@ async def health_check():
 api_router.include_router(auth_router)
 api_router.include_router(chat_router)
 api_router.include_router(users_router)
+api_router.include_router(media_router)
 
 # Include the API router in the main app
 app.include_router(api_router)
