@@ -6,7 +6,6 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import os
 import secrets
-import random
 
 from database import get_user_by_id, get_user_by_phone, get_user_by_email
 from utils import utc_now
@@ -22,7 +21,8 @@ if not SECRET_KEY:
     logger.warning("For production, set SECRET_KEY environment variable.")
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 days
+ACCESS_TOKEN_EXPIRE_MINUTES = 60  # 1 hour (short-lived)
+REFRESH_TOKEN_EXPIRE_DAYS = 30  # 30 days (long-lived)
 
 # Development mode flag for OTP exposure
 DEV_MODE = os.environ.get('DEV_MODE', 'true').lower() == 'true'
@@ -42,9 +42,39 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
         expire = utc_now() + expires_delta
     else:
         expire = utc_now() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+    to_encode.update({"exp": expire, "type": "access"})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+def create_refresh_token(data: dict) -> str:
+    """Create a long-lived refresh token"""
+    to_encode = data.copy()
+    expire = utc_now() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire, "type": "refresh"})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def validate_refresh_token(token: str) -> Optional[str]:
+    """Validate refresh token and return user_id if valid"""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        
+        # Verify it's a refresh token
+        if payload.get("type") != "refresh":
+            return None
+        
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            return None
+        
+        # Verify user still exists
+        user = await get_user_by_id(user_id)
+        if not user:
+            return None
+        
+        return user_id
+    except JWTError:
+        return None
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     credentials_exception = HTTPException(
@@ -67,8 +97,9 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     return user
 
 def generate_otp() -> str:
-    """Generate a 6-digit OTP"""
-    return str(random.randint(100000, 999999))
+    """Generate a cryptographically secure 6-digit OTP"""
+    # Use secrets module for cryptographic randomness
+    return str(secrets.randbelow(900000) + 100000)
 
 async def authenticate_user(phone_or_email: str, password: str):
     """Authenticate user with phone/email and password"""

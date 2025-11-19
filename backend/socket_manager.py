@@ -1,5 +1,6 @@
 import socketio
 import logging
+import os
 from typing import Dict, Set
 from datetime import datetime
 from utils import utc_now
@@ -8,10 +9,16 @@ logger = logging.getLogger(__name__)
 
 class SocketManager:
     def __init__(self):
+        # Get allowed origins from environment
+        allowed_origins = os.getenv(
+            'CORS_ORIGINS',
+            'http://localhost:19006,http://localhost:8081,http://localhost:3000'
+        ).split(',')
+        
         # Create Socket.IO server with CORS settings
         self.sio = socketio.AsyncServer(
             async_mode='asgi',
-            cors_allowed_origins='*',
+            cors_allowed_origins=allowed_origins,
             logger=True,
             engineio_logger=True,
             ping_timeout=60,
@@ -66,9 +73,35 @@ class SocketManager:
         async def authenticate(sid, data):
             """Authenticate user and register connection"""
             try:
-                user_id = data.get('user_id')
-                if not user_id:
-                    await self.sio.emit('error', {'message': 'Invalid user_id'}, room=sid)
+                # Validate JWT token instead of trusting user_id
+                token = data.get('token')
+                if not token:
+                    logger.warning(f"Authentication failed for {sid}: No token provided")
+                    await self.sio.emit('error', {'message': 'Authentication token required'}, room=sid)
+                    await self.sio.disconnect(sid)
+                    return
+                
+                # Verify JWT token
+                from jose import JWTError, jwt
+                from auth import SECRET_KEY, ALGORITHM
+                
+                try:
+                    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                    user_id = payload.get("sub")
+                    
+                    if not user_id:
+                        raise JWTError("Invalid token payload")
+                    
+                    # Verify user still exists
+                    from database import get_user_by_id
+                    user = await get_user_by_id(user_id)
+                    if not user:
+                        raise JWTError("User not found")
+                        
+                except JWTError as e:
+                    logger.warning(f"JWT validation failed for {sid}: {e}")
+                    await self.sio.emit('error', {'message': 'Invalid or expired token'}, room=sid)
+                    await self.sio.disconnect(sid)
                     return
                 
                 # Register connection
@@ -80,7 +113,7 @@ class SocketManager:
                 from database import update_user
                 await update_user(user_id, {'is_online': True, 'last_seen': utc_now()})
                 
-                logger.info(f"User {user_id} authenticated with session {sid}")
+                logger.info(f"✅ User {user_id} authenticated with session {sid}")
                 await self.sio.emit('authenticated', {'user_id': user_id, 'status': 'authenticated'}, room=sid)
                 
                 # Notify contacts
@@ -88,7 +121,8 @@ class SocketManager:
                 
             except Exception as e:
                 logger.error(f"Authentication error: {e}")
-                await self.sio.emit('error', {'message': str(e)}, room=sid)
+                await self.sio.emit('error', {'message': 'Authentication failed'}, room=sid)
+                await self.sio.disconnect(sid)
         
         @self.sio.event
         async def join_chat(sid, data):

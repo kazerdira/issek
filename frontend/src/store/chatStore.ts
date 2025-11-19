@@ -21,12 +21,15 @@ export interface Message {
 
 export interface Chat {
   id: string;
-  chat_type: 'direct' | 'group';
+  chat_type: 'direct' | 'group' | 'channel';
   name?: string;
   description?: string;
   avatar?: string;
   participants: string[];
   participant_details?: any[];
+  admins?: string[];
+  is_public?: boolean;
+  only_admins_can_post?: boolean;
   last_message?: any;
   unread_count: number;
   created_at: string;

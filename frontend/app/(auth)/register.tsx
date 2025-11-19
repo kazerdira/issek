@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../src/store/authStore';
@@ -44,23 +45,61 @@ export default function RegisterScreen() {
         password,
       });
 
-      await login(response.data.access_token, response.data.user);
+      await login(response.data.access_token, response.data.refresh_token, response.data.user);
       router.replace('/(tabs)/chats');
     } catch (error: any) {
-      Alert.alert('Registration Failed', error.response?.data?.detail || 'Something went wrong');
+      let errorMessage = 'Something went wrong. Please try again.';
+      
+      if (error.response?.data?.detail) {
+        const detail = error.response.data.detail;
+        
+        // Handle Pydantic validation errors (array of error objects)
+        if (Array.isArray(detail)) {
+          const messages = detail.map((err: any) => {
+            // Extract user-friendly message from Pydantic error
+            if (err.msg && err.msg.includes('Password must be at least')) {
+              return '🔒 Password must be at least 8 characters long';
+            }
+            if (err.msg && err.msg.includes('uppercase')) {
+              return '🔒 Password must contain at least one uppercase letter';
+            }
+            if (err.msg && err.msg.includes('lowercase')) {
+              return '🔒 Password must contain at least one lowercase letter';
+            }
+            if (err.msg && err.msg.includes('number')) {
+              return '🔒 Password must contain at least one number';
+            }
+            if (err.msg && err.msg.includes('special character')) {
+              return '🔒 Password must contain at least one special character (!@#$%^&*...)';
+            }
+            // Return the message as-is if we can't parse it
+            return err.msg || 'Invalid input';
+          });
+          errorMessage = messages.join('\n');
+        } 
+        // Handle simple string error messages
+        else if (typeof detail === 'string') {
+          errorMessage = detail;
+        }
+      } else if (error.message) {
+        errorMessage = `Network error: ${error.message}`;
+      }
+      
+      Alert.alert('Registration Failed', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-        <Ionicons name="arrow-back" size={24} color={colors.text} />
-      </TouchableOpacity>
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+      >
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
@@ -131,6 +170,10 @@ export default function RegisterScreen() {
               />
             </TouchableOpacity>
           </View>
+          
+          <Text style={styles.passwordHint}>
+            Password must be 8+ characters with uppercase, lowercase, number & special character
+          </Text>
 
           <TouchableOpacity
             style={styles.registerButton}
@@ -152,14 +195,18 @@ export default function RegisterScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  container: {
+    flex: 1,
   },
   backButton: {
     position: 'absolute',
@@ -209,6 +256,14 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     fontSize: 16,
     color: colors.text,
+  },
+  passwordHint: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: -12,
+    marginBottom: 16,
+    marginLeft: 4,
+    fontStyle: 'italic',
   },
   registerButton: {
     backgroundColor: colors.primary,

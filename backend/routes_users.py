@@ -18,13 +18,26 @@ async def search_users(
     db = Database.get_db()
     
     # Search by username or display name
+    # Exclude current user
+    # Exclude users who blocked current user
+    # Exclude users blocked by current user
+    
+    # First get IDs of users who blocked current user
+    blockers = await db.users.find({'blocked_users': current_user['id']}, {'id': 1}).to_list(None)
+    blocker_ids = [b['id'] for b in blockers]
+    
+    # Get IDs blocked by current user
+    blocked_ids = current_user.get('blocked_users', [])
+    
+    excluded_ids = [current_user['id']] + blocker_ids + blocked_ids
+    
     users = await db.users.find({
         '$or': [
             {'username': {'$regex': q, '$options': 'i'}},
             {'display_name': {'$regex': q, '$options': 'i'}},
             {'phone_number': {'$regex': q}}
         ],
-        'id': {'$ne': current_user['id']}  # Exclude current user
+        'id': {'$nin': excluded_ids}
     }).limit(20).to_list(20)
     
     result = []

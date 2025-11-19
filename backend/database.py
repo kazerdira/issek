@@ -14,17 +14,47 @@ class Database:
     @classmethod
     def get_db(cls):
         if cls.db is None:
-            mongo_url = os.environ['MONGO_URL']
-            cls.client = AsyncIOMotorClient(mongo_url)
-            cls.db = cls.client[os.environ.get('DB_NAME', 'chatapp')]
-            logger.info("Database connection established")
+            try:
+                mongo_url = os.environ['MONGO_URL']
+                
+                # Configure connection pooling
+                cls.client = AsyncIOMotorClient(
+                    mongo_url,
+                    maxPoolSize=50,  # Maximum connections in pool
+                    minPoolSize=10,  # Minimum connections maintained
+                    maxIdleTimeMS=60000,  # Close idle connections after 1 minute
+                    serverSelectionTimeoutMS=5000,  # Timeout for server selection
+                    connectTimeoutMS=10000,  # Timeout for initial connection
+                    socketTimeoutMS=20000  # Timeout for socket operations
+                )
+                
+                cls.db = cls.client[os.environ.get('DB_NAME', 'chatapp')]
+                logger.info("Database connection established with connection pooling")
+            except Exception as e:
+                logger.error(f"Failed to connect to MongoDB: {str(e)}")
+                raise RuntimeError(f"Database connection failed: {str(e)}")
+        
         return cls.db
 
     @classmethod
     async def close_db(cls):
         if cls.client:
-            cls.client.close()
-            logger.info("Database connection closed")
+            try:
+                cls.client.close()
+                logger.info("Database connection closed")
+            except Exception as e:
+                logger.error(f"Error closing database connection: {str(e)}")
+    
+    @classmethod
+    async def health_check(cls) -> bool:
+        """Check if database connection is alive"""
+        try:
+            db = cls.get_db()
+            await db.command('ping')
+            return True
+        except Exception as e:
+            logger.error(f"Database health check failed: {str(e)}")
+            return False
 
     @classmethod
     async def create_indexes(cls):
@@ -68,6 +98,11 @@ class Database:
         # OTP indexes
         await db.otps.create_index("phone_number")
         await db.otps.create_index("created_at", expireAfterSeconds=600)  # Auto-delete after 10 minutes
+        
+        # Friend Requests indexes
+        await db.friend_requests.create_index([("sender_id", 1), ("receiver_id", 1)], unique=True)
+        await db.friend_requests.create_index("receiver_id")
+        await db.friend_requests.create_index("sender_id")
         
         logger.info("Database indexes created successfully")
 

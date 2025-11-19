@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../src/store/authStore';
@@ -38,21 +39,38 @@ export default function LoginScreen() {
         password,
       });
 
-      await login(response.data.access_token, response.data.user);
+      await login(response.data.access_token, response.data.refresh_token, response.data.user);
       router.replace('/(tabs)/chats');
     } catch (error: any) {
-      Alert.alert('Login Failed', error.response?.data?.detail || 'Invalid credentials');
+      let errorMessage = 'Invalid credentials. Please try again.';
+      
+      if (error.response?.data?.detail) {
+        const detail = error.response.data.detail;
+        
+        // Handle validation errors
+        if (Array.isArray(detail)) {
+          const messages = detail.map((err: any) => err.msg || 'Invalid input');
+          errorMessage = messages.join('\n');
+        } else if (typeof detail === 'string') {
+          errorMessage = detail;
+        }
+      } else if (error.message) {
+        errorMessage = `Network error: ${error.message}`;
+      }
+      
+      Alert.alert('Login Failed', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <View style={styles.content}>
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+      >
+        <View style={styles.content}>
         <View style={styles.header}>
           <View style={styles.logoContainer}>
             <Ionicons name="chatbubbles" size={64} color={colors.primary} />
@@ -118,15 +136,19 @@ export default function LoginScreen() {
             <Text style={styles.footerLink}>Sign Up</Text>
           </TouchableOpacity>
         </View>
-      </View>
-    </KeyboardAvoidingView>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  container: {
+    flex: 1,
   },
   content: {
     flex: 1,

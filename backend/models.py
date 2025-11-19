@@ -1,8 +1,9 @@
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
 from utils import utc_now
+import base64
 
 class UserRole(str, Enum):
     REGULAR = "regular"
@@ -20,6 +21,12 @@ class MessageType(str, Enum):
 class ChatType(str, Enum):
     DIRECT = "direct"
     GROUP = "group"
+    CHANNEL = "channel"
+
+class FriendRequestStatus(str, Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
 
 class MessageStatus(str, Enum):
     SENT = "sent"
@@ -39,6 +46,32 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: Optional[str] = None
 
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: Optional[str]) -> Optional[str]:
+        """Enforce strong password requirements"""
+        if v is None:
+            return v
+        
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long")
+        
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        
+        if not any(c.islower() for c in v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain at least one number")
+        
+        # Check for special characters
+        special_chars = "!@#$%^&*()_+-=[]{}|;:,.<>?"
+        if not any(c in special_chars for c in v):
+            raise ValueError("Password must contain at least one special character (!@#$%^&*()_+-=[]{}|;:,.<>?)")
+        
+        return v
+
 class UserLogin(BaseModel):
     phone_number: Optional[str] = None
     email: Optional[str] = None
@@ -56,10 +89,20 @@ class User(UserBase):
     is_online: bool = False
     last_seen: Optional[datetime] = None
     contacts: List[str] = []  # user IDs
+    friends: List[str] = []  # user IDs (mutual)
     blocked_users: List[str] = []
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
     google_id: Optional[str] = None
+
+# Friend Request Model
+class FriendRequest(BaseModel):
+    id: str
+    sender_id: str
+    receiver_id: str
+    status: FriendRequestStatus = FriendRequestStatus.PENDING
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 # OTP Models
 class OTPRequest(BaseModel):
@@ -87,9 +130,35 @@ class MessageBase(BaseModel):
     media_url: Optional[str] = None  # base64 for images/videos
     file_name: Optional[str] = None
     file_size: Optional[int] = None
-    duration: Optional[int] = None  # for voice/video messages
+    duration: Optional[int] = None  # for voice/video messages (deprecated, use media_metadata)
+    media_metadata: Optional[Dict[str, Any]] = None  # For storing media-specific data like duration
     scheduled_at: Optional[datetime] = None
     delete_at: Optional[datetime] = None  # for disappearing messages
+
+    @field_validator('media_url')
+    @classmethod
+    def validate_media_url(cls, v: Optional[str]) -> Optional[str]:
+        """Validate base64 media and enforce 10MB size limit"""
+        if v is None:
+            return v
+        
+        # Check if it's valid base64
+        try:
+            # Remove data URI prefix if present (data:image/png;base64,...)
+            if v.startswith('data:'):
+                v = v.split(',', 1)[1] if ',' in v else v
+            
+            # Decode base64 to check validity and size
+            decoded = base64.b64decode(v, validate=True)
+            
+            # Enforce 10MB limit (10 * 1024 * 1024 bytes)
+            max_size = 10 * 1024 * 1024
+            if len(decoded) > max_size:
+                raise ValueError(f"Media size exceeds 10MB limit (got {len(decoded) / (1024*1024):.2f}MB)")
+            
+            return v
+        except Exception as e:
+            raise ValueError(f"Invalid base64 media_url: {str(e)}")
 
 class MessageCreate(BaseModel):
     """Model for creating a message - chat_id and sender_id are extracted from path and auth"""
@@ -100,7 +169,33 @@ class MessageCreate(BaseModel):
     media_url: Optional[str] = None  # base64 for images/videos
     file_name: Optional[str] = None
     file_size: Optional[int] = None
-    duration: Optional[int] = None  # for voice/video messages
+    duration: Optional[int] = None  # for voice/video messages (deprecated, use media_metadata)
+
+    @field_validator('media_url')
+    @classmethod
+    def validate_media_url(cls, v: Optional[str]) -> Optional[str]:
+        """Validate base64 media and enforce 10MB size limit"""
+        if v is None:
+            return v
+        
+        # Check if it's valid base64
+        try:
+            # Remove data URI prefix if present (data:image/png;base64,...)
+            if v.startswith('data:'):
+                v = v.split(',', 1)[1] if ',' in v else v
+            
+            # Decode base64 to check validity and size
+            decoded = base64.b64decode(v, validate=True)
+            
+            # Enforce 10MB limit (10 * 1024 * 1024 bytes)
+            max_size = 10 * 1024 * 1024
+            if len(decoded) > max_size:
+                raise ValueError(f"Media size exceeds 10MB limit (got {len(decoded) / (1024*1024):.2f}MB)")
+            
+            return v
+        except Exception as e:
+            raise ValueError(f"Invalid base64 media_url: {str(e)}")
+    media_metadata: Optional[Dict[str, Any]] = None  # For storing media-specific data like duration
     scheduled_at: Optional[datetime] = None
     delete_at: Optional[datetime] = None  # for disappearing messages
 
@@ -134,6 +229,8 @@ class ChatBase(BaseModel):
     description: Optional[str] = None
     avatar: Optional[str] = None  # base64
     participants: List[str]  # user IDs
+    is_public: bool = False  # for groups/channels
+    only_admins_can_post: bool = False  # for channels
 
 class ChatCreate(ChatBase):
     pass
@@ -161,5 +258,9 @@ class TypingIndicator(BaseModel):
 # Token Response
 class Token(BaseModel):
     access_token: str
+    refresh_token: str  # Long-lived token for refreshing access tokens
     token_type: str = "bearer"
     user: UserResponse
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str

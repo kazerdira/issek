@@ -5,15 +5,15 @@ import logging
 
 from models import (
     UserCreate, UserLogin, UserResponse, Token,
-    OTPRequest, OTPVerify, User
+    OTPRequest, OTPVerify, User, RefreshTokenRequest
 )
 from auth import (
-    get_password_hash, create_access_token, authenticate_user,
-    generate_otp, get_current_user
+    get_password_hash, create_access_token, create_refresh_token,
+    validate_refresh_token, authenticate_user, generate_otp, get_current_user
 )
 from database import (
     Database, get_user_by_phone, get_user_by_email,
-    get_user_by_username, create_user, update_user
+    get_user_by_username, get_user_by_id, create_user, update_user
 )
 from utils import utc_now
 
@@ -24,7 +24,8 @@ logger = logging.getLogger(__name__)
 from server import limiter
 
 @router.post("/register", response_model=Token)
-async def register(user_data: UserCreate):
+@limiter.limit("3/minute")  # Limit registration attempts
+async def register(request: Request, user_data: UserCreate):
     """Register a new user"""
     db = Database.get_db()
     
@@ -72,8 +73,9 @@ async def register(user_data: UserCreate):
     
     await create_user(user_dict)
     
-    # Create access token
+    # Create access token and refresh token
     access_token = create_access_token(data={"sub": user_id})
+    refresh_token = create_refresh_token(data={"sub": user_id})
     
     user_response = UserResponse(
         id=user_id,
@@ -88,7 +90,7 @@ async def register(user_data: UserCreate):
         created_at=utc_now()
     )
     
-    return Token(access_token=access_token, user=user_response)
+    return Token(access_token=access_token, refresh_token=refresh_token, user=user_response)
 
 @router.post("/login", response_model=Token)
 @limiter.limit("5/minute")
@@ -118,8 +120,9 @@ async def login(request: Request, login_data: UserLogin):
     # Update user status
     await update_user(user['id'], {'is_online': True, 'last_seen': utc_now()})
     
-    # Create access token
+    # Create access token and refresh token
     access_token = create_access_token(data={"sub": user['id']})
+    refresh_token = create_refresh_token(data={"sub": user['id']})
     
     user_response = UserResponse(
         id=user['id'],
@@ -135,7 +138,7 @@ async def login(request: Request, login_data: UserLogin):
         created_at=user['created_at']
     )
     
-    return Token(access_token=access_token, user=user_response)
+    return Token(access_token=access_token, refresh_token=refresh_token, user=user_response)
 
 @router.post("/request-otp")
 @limiter.limit("3/hour")
@@ -174,7 +177,8 @@ async def request_otp(request: Request, otp_request: OTPRequest):
     return response
 
 @router.post("/verify-otp", response_model=Token)
-async def verify_otp(otp_verify: OTPVerify):
+@limiter.limit("5/minute")  # Limit OTP verification attempts
+async def verify_otp(request: Request, otp_verify: OTPVerify):
     """Verify OTP and create/login user"""
     db = Database.get_db()
     
@@ -231,8 +235,9 @@ async def verify_otp(otp_verify: OTPVerify):
         # Update existing user
         await update_user(user['id'], {'is_online': True, 'last_seen': utc_now()})
     
-    # Create access token
+    # Create access token and refresh token
     access_token = create_access_token(data={"sub": user['id']})
+    refresh_token = create_refresh_token(data={"sub": user['id']})
     
     user_response = UserResponse(
         id=user['id'],
@@ -247,7 +252,48 @@ async def verify_otp(otp_verify: OTPVerify):
         created_at=user['created_at']
     )
     
-    return Token(access_token=access_token, user=user_response)
+    return Token(access_token=access_token, refresh_token=refresh_token, user=user_response)
+
+@router.post("/refresh", response_model=Token)
+@limiter.limit("10/minute")
+async def refresh_access_token(request: Request, refresh_request: RefreshTokenRequest):
+    """Refresh access token using refresh token"""
+    # Validate refresh token
+    user_id = await validate_refresh_token(refresh_request.refresh_token)
+    
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token"
+        )
+    
+    # Get user details
+    user = await get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Create new access token and refresh token
+    access_token = create_access_token(data={"sub": user_id})
+    new_refresh_token = create_refresh_token(data={"sub": user_id})
+    
+    user_response = UserResponse(
+        id=user['id'],
+        phone_number=user.get('phone_number'),
+        email=user.get('email'),
+        username=user['username'],
+        display_name=user['display_name'],
+        bio=user.get('bio'),
+        avatar=user.get('avatar'),
+        role=user.get('role', 'regular'),
+        is_online=user.get('is_online', False),
+        last_seen=user.get('last_seen'),
+        created_at=user['created_at']
+    )
+    
+    return Token(access_token=access_token, refresh_token=new_refresh_token, user=user_response)
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: dict = Depends(get_current_user)):

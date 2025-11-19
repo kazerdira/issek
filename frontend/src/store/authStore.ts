@@ -17,12 +17,14 @@ interface User {
 interface AuthState {
   user: User | null;
   token: string | null;
+  refreshToken: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   setUser: (user: User | null) => void;
   setToken: (token: string | null) => void;
+  setRefreshToken: (refreshToken: string | null) => void;
   setLoading: (loading: boolean) => void;
-  login: (token: string, user: User) => Promise<void>;
+  login: (token: string, refreshToken: string, user: User) => Promise<void>;
   logout: () => Promise<void>;
   loadAuth: () => Promise<void>;
 }
@@ -30,6 +32,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   token: null,
+  refreshToken: null,
   isLoading: true,
   isAuthenticated: false,
 
@@ -37,28 +40,33 @@ export const useAuthStore = create<AuthState>((set) => ({
   
   setToken: (token) => set({ token }),
   
+  setRefreshToken: (refreshToken) => set({ refreshToken }),
+  
   setLoading: (isLoading) => set({ isLoading }),
 
-  login: async (token: string, user: User) => {
+  login: async (token: string, refreshToken: string, user: User) => {
     await AsyncStorage.setItem('token', token);
+    await AsyncStorage.setItem('refreshToken', refreshToken);
     await AsyncStorage.setItem('user', JSON.stringify(user));
-    set({ token, user, isAuthenticated: true, isLoading: false });
+    set({ token, refreshToken, user, isAuthenticated: true, isLoading: false });
   },
 
   logout: async () => {
     await AsyncStorage.removeItem('token');
+    await AsyncStorage.removeItem('refreshToken');
     await AsyncStorage.removeItem('user');
-    set({ token: null, user: null, isAuthenticated: false, isLoading: false });
+    set({ token: null, refreshToken: null, user: null, isAuthenticated: false, isLoading: false });
   },
 
   loadAuth: async () => {
     try {
       const token = await AsyncStorage.getItem('token');
+      const refreshToken = await AsyncStorage.getItem('refreshToken');
       const userStr = await AsyncStorage.getItem('user');
       
-      if (token && userStr) {
+      if (token && refreshToken && userStr) {
         const user = JSON.parse(userStr);
-        set({ token, user, isAuthenticated: true, isLoading: false });
+        set({ token, refreshToken, user, isAuthenticated: true, isLoading: false });
       } else {
         set({ isLoading: false });
       }

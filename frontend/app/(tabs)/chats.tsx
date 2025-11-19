@@ -9,6 +9,7 @@ import {
   RefreshControl,
   Platform,
   BackHandler,
+  SafeAreaView,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useChatStore, Chat } from '../../src/store/chatStore';
@@ -47,11 +48,13 @@ export default function ChatsScreen() {
     useCallback(() => {
       console.log('Chats screen focused, reloading chats');
       loadChats();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
   );
 
   useEffect(() => {
     loadChats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadChats = async () => {
@@ -72,14 +75,18 @@ export default function ChatsScreen() {
     loadChats();
   };
 
+  const handleCreateChat = () => {
+    router.push('/chat/create');
+  };
+
   const handleChatPress = (chatId: string) => {
     console.log('Navigating to chat:', chatId);
     router.push(`/chat/${chatId}`);
   };
 
   const getChatName = (chat: Chat) => {
-    if (chat.chat_type === 'group') {
-      return chat.name || 'Group Chat';
+    if (chat.chat_type === 'group' || chat.chat_type === 'channel') {
+      return chat.name || (chat.chat_type === 'channel' ? 'Channel' : 'Group Chat');
     }
     // For direct chats, show the other user's name
     const otherUser = chat.participant_details?.find((p) => p.id !== user?.id);
@@ -87,7 +94,7 @@ export default function ChatsScreen() {
   };
 
   const getChatAvatar = (chat: Chat) => {
-    if (chat.chat_type === 'group') {
+    if (chat.chat_type === 'group' || chat.chat_type === 'channel') {
       return chat.avatar;
     }
     const otherUser = chat.participant_details?.find((p) => p.id !== user?.id);
@@ -95,7 +102,7 @@ export default function ChatsScreen() {
   };
 
   const getChatOnlineStatus = (chat: Chat) => {
-    if (chat.chat_type === 'group') return false;
+    if (chat.chat_type === 'group' || chat.chat_type === 'channel') return false;
     const otherUser = chat.participant_details?.find((p) => p.id !== user?.id);
     return otherUser?.is_online || false;
   };
@@ -176,13 +183,29 @@ export default function ChatsScreen() {
     );
   }
 
+  // Sort chats by last message timestamp (newest first)
+  const sortedChats = [...chats].sort((a, b) => {
+    const aTime = a.last_message?.created_at ? new Date(a.last_message.created_at).getTime() : 0;
+    const bTime = b.last_message?.created_at ? new Date(b.last_message.created_at).getTime() : 0;
+    return bTime - aTime; // Descending order (newest first)
+  });
+
   return (
     <View style={styles.container}>
+      <SafeAreaView style={styles.safeAreaTop}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Chats</Text>
+          <TouchableOpacity onPress={handleCreateChat} style={styles.createButton}>
+            <Ionicons name="people-circle-outline" size={28} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+
       <FlatList
-        data={chats}
+        data={sortedChats}
         renderItem={renderChat}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={chats.length === 0 ? styles.emptyContainer : undefined}
+        contentContainerStyle={sortedChats.length === 0 ? styles.emptyContainer : undefined}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="chatbubbles-outline" size={64} color={colors.textMuted} />
@@ -214,6 +237,28 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  safeAreaTop: {
+    backgroundColor: colors.surface,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  createButton: {
+    padding: 8,
   },
   loadingContainer: {
     flex: 1,

@@ -86,6 +86,19 @@ async def create_new_chat(
     response = ChatResponse(**chat_dict)
     response.participant_details = participants_details
     
+    # Notify all participants (except creator) via socket
+    if chat_data.chat_type in [ChatType.GROUP, ChatType.CHANNEL]:
+        response_dict = response.model_dump(mode='json')
+        for participant_id in chat_data.participants:
+            if participant_id != current_user['id']:
+                await socket_manager.send_message_to_user(
+                    participant_id,
+                    'chat_created',
+                    {
+                        'chat': response_dict
+                    }
+                )
+    
     return response
 
 @router.get("/", response_model=List[ChatResponse])
@@ -208,6 +221,9 @@ async def get_messages(
     
     messages = await get_chat_messages(chat_id, limit, skip)
     
+    # Filter out messages that current user has deleted for themselves
+    messages = [msg for msg in messages if current_user['id'] not in msg.get('deleted_for', [])]
+    
     # Batch fetch all unique senders
     sender_ids = list(set(msg['sender_id'] for msg in messages))
     db = Database.get_db()
@@ -293,6 +309,31 @@ async def send_message(
             detail="Not a participant of this chat"
         )
     
+    # Check for blocks in direct chats
+    if chat['chat_type'] == ChatType.DIRECT:
+        other_participant_id = next((p for p in chat['participants'] if p != current_user['id']), None)
+        if other_participant_id:
+            other_user = await get_user_by_id(other_participant_id)
+            if other_user and current_user['id'] in other_user.get('blocked_users', []):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You cannot send messages to this user"
+                )
+            # Also check if current user blocked the other user (optional, but good for consistency)
+            if other_participant_id in current_user.get('blocked_users', []):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You have blocked this user. Unblock to send messages."
+                )
+
+    # Check channel permissions
+    if chat.get('chat_type') == ChatType.CHANNEL and chat.get('only_admins_can_post', False):
+        if current_user['id'] not in chat.get('admins', []):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only admins can post in this channel"
+            )
+    
     # Validate reply_to message exists and belongs to this chat
     if message_data.reply_to:
         reply_msg = await get_message_by_id(message_data.reply_to)
@@ -350,6 +391,24 @@ async def send_message(
                 'sender_id': reply_msg['sender_id'],
                 'created_at': reply_msg['created_at'].isoformat() if isinstance(reply_msg['created_at'], datetime) else reply_msg['created_at']
             }
+    
+    # Update chat's last_message
+    db = Database.get_db()
+    await db.chats.update_one(
+        {'id': chat_id},
+        {
+            '$set': {
+                'last_message': {
+                    'id': message_id,
+                    'content': message_dict['content'],
+                    'message_type': message_dict['message_type'],
+                    'sender_id': current_user['id'],
+                    'created_at': message_dict['created_at']
+                },
+                'updated_at': utc_now()
+            }
+        }
+    )
     
     # Broadcast message via Socket.IO - serialize datetime objects to ISO strings
     message_data_json = response.model_dump(mode='json')
@@ -416,18 +475,25 @@ async def delete_message(
             detail="Message not found"
         )
     
-    if message['sender_id'] != current_user['id']:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Can only delete your own messages"
-        )
-    
     if for_everyone:
+        # Only sender can delete for everyone
+        if message['sender_id'] != current_user['id']:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Can only delete your own messages for everyone"
+            )
+        
         # Delete for everyone
         await update_message(message_id, {'deleted': True, 'content': 'This message was deleted'})
         
         # Broadcast deletion
         await socket_manager.broadcast_message_deleted(message['chat_id'], message_id)
+    else:
+        # Delete for me only - add current user to deleted_for list
+        deleted_for = message.get('deleted_for', [])
+        if current_user['id'] not in deleted_for:
+            deleted_for.append(current_user['id'])
+            await update_message(message_id, {'deleted_for': deleted_for})
     
     return {"message": "Message deleted"}
 
@@ -756,3 +822,227 @@ async def forward_messages(
         "message": f"Forwarded {len(forwarded_messages)} messages",
         "forwarded_ids": forwarded_messages
     }
+
+@router.put("/{chat_id}", response_model=ChatResponse)
+async def update_chat(
+    chat_id: str,
+    chat_update: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update chat info (name, description, avatar, settings)"""
+    chat = await get_chat_by_id(chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+        
+    if chat['chat_type'] == ChatType.DIRECT:
+        raise HTTPException(status_code=400, detail="Cannot update direct chat info")
+        
+    if current_user['id'] not in chat.get('admins', []):
+        raise HTTPException(status_code=403, detail="Only admins can update chat info")
+        
+    db = Database.get_db()
+    
+    # Filter allowed fields
+    allowed_fields = ['name', 'description', 'avatar', 'is_public', 'only_admins_can_post']
+    update_data = {k: v for k, v in chat_update.items() if k in allowed_fields}
+    update_data['updated_at'] = utc_now()
+    
+    await db.chats.update_one(
+        {'id': chat_id},
+        {'$set': update_data}
+    )
+    
+    updated_chat = await get_chat_by_id(chat_id)
+    return ChatResponse(**updated_chat)
+
+@router.post("/{chat_id}/participants", response_model=ChatResponse)
+async def add_participants(
+    chat_id: str,
+    user_ids: List[str],
+    current_user: dict = Depends(get_current_user)
+):
+    """Add participants to a group/channel"""
+    chat = await get_chat_by_id(chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+        
+    if chat['chat_type'] == ChatType.DIRECT:
+        raise HTTPException(status_code=400, detail="Cannot add participants to direct chat")
+        
+    # Check permissions (admins only for private groups/channels usually, but let's say admins for now)
+    if current_user['id'] not in chat.get('admins', []):
+        # If public group, maybe anyone can add? Let's stick to admins for now for safety
+        raise HTTPException(status_code=403, detail="Only admins can add participants")
+        
+    db = Database.get_db()
+    
+    # Filter valid users
+    users = await db.users.find({'id': {'$in': user_ids}}).to_list(None)
+    valid_user_ids = [u['id'] for u in users]
+    
+    await db.chats.update_one(
+        {'id': chat_id},
+        {'$addToSet': {'participants': {'$each': valid_user_ids}}}
+    )
+    
+    updated_chat = await get_chat_by_id(chat_id)
+    updated_chat_response = ChatResponse(**updated_chat)
+    
+    # Notify new participants via socket
+    response_dict = updated_chat_response.model_dump(mode='json')
+    for user_id in valid_user_ids:
+        await socket_manager.send_message_to_user(
+            user_id,
+            'added_to_chat',
+            {
+                'chat': response_dict
+            }
+        )
+    
+    # Notify existing members via socket
+    for participant_id in chat['participants']:
+        if participant_id not in valid_user_ids:
+            await socket_manager.send_message_to_user(
+                participant_id,
+                'participants_added',
+                {
+                    'chat_id': chat_id,
+                    'new_participants': valid_user_ids
+                }
+            )
+    
+    return updated_chat_response
+
+@router.delete("/{chat_id}/participants/{user_id}", response_model=ChatResponse)
+async def remove_participant(
+    chat_id: str,
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Remove participant from group/channel"""
+    chat = await get_chat_by_id(chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+        
+    if chat['chat_type'] == ChatType.DIRECT:
+        raise HTTPException(status_code=400, detail="Cannot remove participants from direct chat")
+        
+    # Admins can remove anyone, users can remove themselves (leave)
+    if current_user['id'] != user_id and current_user['id'] not in chat.get('admins', []):
+        raise HTTPException(status_code=403, detail="Not authorized to remove this participant")
+        
+    db = Database.get_db()
+    
+    await db.chats.update_one(
+        {'id': chat_id},
+        {'$pull': {'participants': user_id, 'admins': user_id}}
+    )
+    
+    updated_chat = await get_chat_by_id(chat_id)
+    
+    # Notify removed user via socket
+    await socket_manager.send_message_to_user(user_id, 'removed_from_chat', {
+        'chat_id': chat_id
+    })
+    
+    # Notify remaining participants via socket
+    response_dict = ChatResponse(**updated_chat).dict()
+    for participant_id in updated_chat['participants']:
+        await socket_manager.send_message_to_user(participant_id, 'participant_removed', {
+            'chat': response_dict,
+            'removed_user_id': user_id
+        })
+    
+    return ChatResponse(**updated_chat)
+
+@router.post("/{chat_id}/admins/{user_id}", response_model=ChatResponse)
+async def promote_admin(
+    chat_id: str,
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Promote participant to admin"""
+    chat = await get_chat_by_id(chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+        
+    if chat['chat_type'] == ChatType.DIRECT:
+        raise HTTPException(status_code=400, detail="Not applicable for direct chats")
+        
+    if current_user['id'] not in chat.get('admins', []):
+        raise HTTPException(status_code=403, detail="Only admins can promote others")
+        
+    if user_id not in chat['participants']:
+        raise HTTPException(status_code=400, detail="User is not a participant")
+        
+    db = Database.get_db()
+    
+    await db.chats.update_one(
+        {'id': chat_id},
+        {'$addToSet': {'admins': user_id}}
+    )
+    
+    updated_chat = await get_chat_by_id(chat_id)
+    
+    # Notify promoted user via socket
+    await socket_manager.send_message_to_user(user_id, 'promoted_to_admin', {
+        'chat_id': chat_id
+    })
+    
+    # Notify all other participants via socket
+    response_dict = ChatResponse(**updated_chat).dict()
+    for participant_id in updated_chat['participants']:
+        if participant_id != user_id:
+            await socket_manager.send_message_to_user(participant_id, 'participant_promoted', {
+                'chat': response_dict,
+                'promoted_user_id': user_id
+            })
+    
+    return ChatResponse(**updated_chat)
+
+@router.delete("/{chat_id}/admins/{user_id}", response_model=ChatResponse)
+async def demote_admin(
+    chat_id: str,
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Demote admin to regular participant"""
+    chat = await get_chat_by_id(chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+        
+    if chat['chat_type'] == ChatType.DIRECT:
+        raise HTTPException(status_code=400, detail="Not applicable for direct chats")
+        
+    if current_user['id'] not in chat.get('admins', []):
+        raise HTTPException(status_code=403, detail="Only admins can demote others")
+        
+    if user_id == current_user['id']:
+        # Prevent removing self if last admin?
+        if len(chat.get('admins', [])) == 1:
+            raise HTTPException(status_code=400, detail="Cannot remove the last admin")
+            
+    db = Database.get_db()
+    
+    await db.chats.update_one(
+        {'id': chat_id},
+        {'$pull': {'admins': user_id}}
+    )
+    
+    updated_chat = await get_chat_by_id(chat_id)
+    
+    # Notify demoted user via socket
+    await socket_manager.send_message_to_user(user_id, 'demoted_from_admin', {
+        'chat_id': chat_id
+    })
+    
+    # Notify all other participants via socket
+    response_dict = ChatResponse(**updated_chat).dict()
+    for participant_id in updated_chat['participants']:
+        if participant_id != user_id:
+            await socket_manager.send_message_to_user(participant_id, 'participant_demoted', {
+                'chat': response_dict,
+                'demoted_user_id': user_id
+            })
+    
+    return ChatResponse(**updated_chat)

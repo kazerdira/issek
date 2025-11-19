@@ -12,6 +12,7 @@ import {
   Alert,
   Modal,
   Keyboard,
+  SafeAreaView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useChatStore, Message } from '../../src/store/chatStore';
@@ -468,8 +469,8 @@ export default function ChatScreen() {
 
   const getChatName = () => {
     if (!currentChat) return 'Chat';
-    if (currentChat.chat_type === 'group') {
-      return currentChat.name || 'Group Chat';
+    if (currentChat.chat_type === 'group' || currentChat.chat_type === 'channel') {
+      return currentChat.name || (currentChat.chat_type === 'channel' ? 'Channel' : 'Group Chat');
     }
     const otherUser = currentChat.participant_details?.find((p) => p.id !== user?.id);
     return otherUser?.display_name || 'Unknown';
@@ -477,7 +478,7 @@ export default function ChatScreen() {
 
   const getChatAvatar = () => {
     if (!currentChat) return undefined;
-    if (currentChat.chat_type === 'group') {
+    if (currentChat.chat_type === 'group' || currentChat.chat_type === 'channel') {
       return currentChat.avatar;
     }
     const otherUser = currentChat.participant_details?.find((p) => p.id !== user?.id);
@@ -485,7 +486,7 @@ export default function ChatScreen() {
   };
 
   const getChatOnlineStatus = () => {
-    if (!currentChat || currentChat.chat_type === 'group') return false;
+    if (!currentChat || currentChat.chat_type === 'group' || currentChat.chat_type === 'channel') return false;
     const otherUser = currentChat.participant_details?.find((p) => p.id !== user?.id);
     return otherUser?.is_online || false;
   };
@@ -497,7 +498,7 @@ export default function ChatScreen() {
     
     if (othersTyping.length === 0) return null;
     
-    if (currentChat?.chat_type === 'group') {
+    if (currentChat?.chat_type === 'group' || currentChat?.chat_type === 'channel') {
       return othersTyping.length === 1 ? '1 person typing...' : `${othersTyping.length} people typing...`;
     }
     
@@ -566,15 +567,19 @@ export default function ChatScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={() => router.back()} 
-          style={styles.backButton}
-        >
-          <Ionicons name="arrow-back" size={24} color={colors.textLight} />
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.headerCenter}>
+      <SafeAreaView style={styles.safeAreaTop}>
+        <View style={styles.header}>
+          <TouchableOpacity 
+            onPress={() => router.back()} 
+            style={styles.backButton}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.textLight} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.headerCenter}
+            onPress={() => router.push(`/chat/info?id=${chatId}`)}
+          >
           <Avatar
             uri={getChatAvatar()}
             name={getChatName()}
@@ -595,7 +600,8 @@ export default function ChatScreen() {
         <TouchableOpacity style={styles.headerButton}>
           <Ionicons name="ellipsis-vertical" size={20} color={colors.textLight} />
         </TouchableOpacity>
-      </View>
+        </View>
+      </SafeAreaView>
 
       {/* Messages */}
       <FlatList
@@ -674,50 +680,58 @@ export default function ChatScreen() {
       {renderReplyPreview()}
 
       {/* Input */}
-      <View style={styles.inputContainer}>
-        <TouchableOpacity 
-          style={styles.inputAction}
-          onPress={handleImagePicker}
-        >
-          <Ionicons name="add-circle" size={28} color={colors.primary} />
-        </TouchableOpacity>
-        
-        <TextInput
-          ref={messageInputRef}
-          style={styles.input}
-          placeholder="Type a message..."
-          value={inputText}
-          onChangeText={handleTyping}
-          onFocus={() => {
-            setTimeout(() => {
-              flatListRef.current?.scrollToEnd({ animated: true });
-            }, 300);
-          }}
-          multiline
-          maxLength={1000}
-        />
-
-        {inputText.trim() ? (
-          <TouchableOpacity 
-            style={styles.sendButton} 
-            onPress={handleSend}
-            disabled={sending}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color={colors.textLight} />
-            ) : (
-              <Ionicons name="send" size={20} color={colors.textLight} />
-            )}
-          </TouchableOpacity>
-        ) : (
+      {currentChat?.chat_type === 'channel' && currentChat.only_admins_can_post && !currentChat.admins?.includes(user?.id || '') ? (
+        <View style={[styles.inputContainer, { justifyContent: 'center', paddingVertical: 16 }]}>
+          <Text style={{ color: colors.textSecondary, fontWeight: '500' }}>
+            Only admins can post in this channel
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.inputContainer}>
           <TouchableOpacity 
             style={styles.inputAction}
-            onPress={handleStartRecording}
+            onPress={handleImagePicker}
           >
-            <Ionicons name="mic" size={24} color={colors.primary} />
+            <Ionicons name="add-circle" size={28} color={colors.primary} />
           </TouchableOpacity>
-        )}
-      </View>
+          
+          <TextInput
+            ref={messageInputRef}
+            style={styles.input}
+            placeholder="Type a message..."
+            value={inputText}
+            onChangeText={handleTyping}
+            onFocus={() => {
+              setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              }, 300);
+            }}
+            multiline
+            maxLength={1000}
+          />
+
+          {inputText.trim() ? (
+            <TouchableOpacity 
+              style={styles.sendButton} 
+              onPress={handleSend}
+              disabled={sending}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color={colors.textLight} />
+              ) : (
+                <Ionicons name="send" size={20} color={colors.textLight} />
+              )}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              style={styles.inputAction}
+              onPress={handleStartRecording}
+            >
+              <Ionicons name="mic" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Voice Recorder */}
       {isRecordingVoice && (
@@ -797,6 +811,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  safeAreaTop: {
+    backgroundColor: colors.primary,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -807,7 +824,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 8,
-    paddingTop: 48,
+    paddingTop: 8,
     backgroundColor: colors.primary,
   },
   flatList: {
@@ -999,34 +1016,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textMuted,
     marginTop: 8,
-  },
-  replyPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    padding: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  replyLine: {
-    width: 3,
-    height: '100%',
-    backgroundColor: colors.primary,
-    marginRight: 12,
-    borderRadius: 2,
-  },
-  replyContent: {
-    flex: 1,
-  },
-  replyName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  replyText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 2,
   },
   inputContainer: {
     flexDirection: 'row',

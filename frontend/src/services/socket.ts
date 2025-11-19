@@ -1,6 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 import Constants from 'expo-constants';
 import { useChatStore } from '../store/chatStore';
+import { useAuthStore } from '../store/authStore';
 
 const API_URL = Constants.expoConfig?.extra?.EXPO_PUBLIC_BACKEND_URL || process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -194,18 +195,151 @@ class SocketService {
       console.log('👋 User joined chat:', data);
     });
 
+    // Friend request events
+    this.socket.on('friend_request_received', (data) => {
+      console.log('🤝 Friend request received:', data);
+      // Refetch friend requests or add to pending list
+      // You may want to show a notification to the user
+    });
+
+    this.socket.on('friend_request_accepted', (data) => {
+      console.log('✅ Friend request accepted:', data);
+      // Refetch friends list or add friend to contacts
+    });
+
+    this.socket.on('friend_request_rejected', (data) => {
+      console.log('❌ Friend request rejected:', data);
+      // Update UI to show rejection
+    });
+
+    // Group/Channel events
+    this.socket.on('chat_created', (data) => {
+      console.log('💬 New chat created:', data);
+      const { addChat } = useChatStore.getState();
+      if (data.chat) {
+        addChat(data.chat);
+      }
+    });
+
+    this.socket.on('added_to_chat', (data) => {
+      console.log('➕ Added to chat:', data);
+      const { addChat } = useChatStore.getState();
+      if (data.chat) {
+        addChat(data.chat);
+      }
+    });
+
+    this.socket.on('removed_from_chat', (data) => {
+      console.log('➖ Removed from chat:', data);
+      const { setChats, chats } = useChatStore.getState();
+      if (data.chat_id) {
+        // Remove chat from list
+        setChats(chats.filter(chat => chat.id !== data.chat_id));
+      }
+    });
+
+    this.socket.on('participants_added', (data) => {
+      console.log('👥 Participants added to chat:', data);
+      const { updateChat } = useChatStore.getState();
+      if (data.chat) {
+        updateChat(data.chat_id, data.chat);
+      }
+    });
+
+    this.socket.on('participant_removed', (data) => {
+      console.log('👤 Participant removed from chat:', data);
+      const { updateChat } = useChatStore.getState();
+      if (data.chat) {
+        updateChat(data.chat_id, data.chat);
+      }
+    });
+
+    this.socket.on('promoted_to_admin', (data) => {
+      console.log('⭐ Promoted to admin:', data);
+      // User should refetch chat details to get updated admin list
+      // For now, just log - could show a notification
+    });
+
+    this.socket.on('demoted_from_admin', (data) => {
+      console.log('⬇️ Demoted from admin:', data);
+      // User should refetch chat details to get updated admin list
+      // For now, just log - could show a notification
+    });
+
+    this.socket.on('participant_promoted', (data) => {
+      console.log('⭐ Participant promoted to admin:', data);
+      const { updateChat } = useChatStore.getState();
+      if (data.chat) {
+        updateChat(data.chat_id, data.chat);
+      }
+    });
+
+    this.socket.on('participant_demoted', (data) => {
+      console.log('⬇️ Participant demoted from admin:', data);
+      const { updateChat } = useChatStore.getState();
+      if (data.chat) {
+        updateChat(data.chat_id, data.chat);
+      }
+    });
+
     this.socket.on('error', (error) => {
       console.error('⚠️ Socket error:', error);
     });
   }
 
-  authenticate(userId: string) {
+  async authenticate(userId: string) {
     if (!this.socket?.connected) {
       console.warn('Cannot authenticate: socket not connected');
       return;
     }
+    
+    // Get JWT token from auth store
+    let token = useAuthStore.getState().token;
+    const refreshToken = useAuthStore.getState().refreshToken;
+    
+    if (!token) {
+      console.error('Cannot authenticate: no token available');
+      return;
+    }
+    
+    // Check if token is expired (simple check by trying to decode)
+    try {
+      const tokenParts = token.split('.');
+      if (tokenParts.length === 3) {
+        const payload = JSON.parse(atob(tokenParts[1]));
+        const exp = payload.exp * 1000; // Convert to milliseconds
+        const now = Date.now();
+        
+        // If token expires in less than 5 minutes, refresh it
+        if (exp - now < 5 * 60 * 1000) {
+          console.log('Token about to expire, refreshing...');
+          
+          if (refreshToken) {
+            try {
+              const { authAPI } = await import('./api');
+              const response = await authAPI.refresh(refreshToken);
+              
+              // Update stored tokens
+              const { setToken, setRefreshToken } = useAuthStore.getState();
+              setToken(response.data.access_token);
+              setRefreshToken(response.data.refresh_token);
+              token = response.data.access_token;
+              
+              console.log('✅ Token refreshed successfully');
+            } catch (error) {
+              console.error('Failed to refresh token:', error);
+              // If refresh fails, user will be logged out
+              return;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error checking token expiration:', error);
+    }
+    
     console.log('Sending authentication for user:', userId);
-    this.socket.emit('authenticate', { user_id: userId });
+    this.socket.emit('authenticate', { token });  // Send token instead of user_id
   }
 
   setCurrentChat(chatId: string | null) {
