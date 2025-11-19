@@ -1114,4 +1114,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  replyPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  replyLine: {
+    width: 3,
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 1.5,
+  },
+  replyContent: {
+    flex: 1,
+  },
+  replyName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  replyText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
 });

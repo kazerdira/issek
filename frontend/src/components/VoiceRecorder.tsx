@@ -270,8 +270,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onSend, onCancel }
             style={styles.cancelButton}
             onPress={handleCancel}
           >
-            <Ionicons name="close" size={24} color={colors.error} />
-            <Text style={styles.cancelText}>Cancel</Text>
+            <Ionicons name="close-circle" size={32} color={colors.error} />
           </TouchableOpacity>
 
           {/* Preview info with play button */}
@@ -299,8 +298,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onSend, onCancel }
             style={styles.sendButton}
             onPress={handleSend}
           >
-            <Ionicons name="send" size={20} color={colors.textLight} />
-            <Text style={styles.sendText}>Send</Text>
+            <Ionicons name="send" size={28} color={colors.textLight} />
           </TouchableOpacity>
         </View>
 
@@ -328,8 +326,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onSend, onCancel }
           style={styles.cancelButton}
           onPress={handleCancel}
         >
-          <Ionicons name="close" size={24} color={colors.error} />
-          <Text style={styles.cancelText}>Cancel</Text>
+          <Ionicons name="close-circle" size={32} color={colors.error} />
         </TouchableOpacity>
 
         {/* Recording indicator and timer */}
@@ -350,8 +347,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ onSend, onCancel }
           style={styles.stopButton}
           onPress={handleStopRecording}
         >
-          <Ionicons name="stop" size={20} color={colors.textLight} />
-          <Text style={styles.stopText}>Stop</Text>
+          <Ionicons name="stop-circle" size={32} color={colors.textLight} />
         </TouchableOpacity>
       </View>
 
@@ -387,20 +383,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   cancelButton: {
-    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: colors.background,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.error,
-  },
-  cancelText: {
-    fontSize: 14,
-    color: colors.error,
-    fontWeight: '600',
+    width: 40,
+    height: 40,
   },
   recordingInfo: {
     flexDirection: 'row',
@@ -420,32 +406,20 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   sendButton: {
-    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    width: 48,
+    height: 48,
     backgroundColor: colors.primary,
-    borderRadius: 20,
-  },
-  sendText: {
-    color: colors.textLight,
-    fontSize: 14,
-    fontWeight: '600',
+    borderRadius: 24,
   },
   stopButton: {
-    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: colors.error,
-    borderRadius: 20,
-  },
-  stopText: {
-    color: colors.textLight,
-    fontSize: 14,
-    fontWeight: '600',
+    width: 48,
+    height: 48,
+    backgroundColor: colors.primary,
+    borderRadius: 24,
   },
   previewContent: {
     flexDirection: 'row',
