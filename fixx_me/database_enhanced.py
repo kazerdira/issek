@@ -27,17 +27,6 @@ class Database:
             logger.info("Database connection closed")
 
     @classmethod
-    async def health_check(cls) -> bool:
-        """Check if database connection is alive"""
-        try:
-            db = cls.get_db()
-            await db.command('ping')
-            return True
-        except Exception as e:
-            logger.error(f"Database health check failed: {str(e)}")
-            return False
-
-    @classmethod
     async def create_indexes(cls):
         """Create database indexes for better performance"""
         db = cls.get_db()
@@ -76,7 +65,7 @@ class Database:
         await db.chats.create_index("owner_id")
         await db.chats.create_index("members.user_id")
         await db.chats.create_index("subscribers")
-        await db.chats.create_index("username", unique=False, sparse=True)  # Non-unique to allow multiple null values for groups/channels
+        await db.chats.create_index("username", unique=True, sparse=True)
         await db.chats.create_index("is_public")
         await db.chats.create_index([("name", "text"), ("description", "text")])
         
@@ -125,21 +114,8 @@ async def create_user(user_data: dict):
 
 async def update_user(user_id: str, update_data: dict):
     db = Database.get_db()
-    # Check if update_data contains MongoDB operators (starts with $)
-    has_operators = any(key.startswith('$') for key in update_data.keys())
-    
-    if has_operators:
-        # Already has operators like $set, $addToSet, etc - use as is
-        # But add updated_at to $set if it exists, or create $set
-        if '$set' in update_data:
-            update_data['$set']['updated_at'] = utc_now()
-        else:
-            update_data['$set'] = {'updated_at': utc_now()}
-        await db.users.update_one({"id": user_id}, update_data)
-    else:
-        # Simple field updates - wrap in $set
-        update_data['updated_at'] = utc_now()
-        await db.users.update_one({"id": user_id}, {"$set": update_data})
+    update_data['updated_at'] = utc_now()
+    await db.users.update_one({"id": user_id}, {"$set": update_data})
 
 async def get_users_by_ids(user_ids: List[str]) -> List[dict]:
     """Batch fetch users"""

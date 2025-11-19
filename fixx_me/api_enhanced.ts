@@ -44,7 +44,6 @@ export const setAuthToken = (token: string | null) => {
 export const authAPI = {
   register: (data: any) => api.post('/auth/register', data),
   login: (data: any) => api.post('/auth/login', data),
-  refresh: (refreshToken: string) => api.post('/auth/refresh', { refresh_token: refreshToken }),
   requestOTP: (phone_number: string) => api.post('/auth/request-otp', { phone_number }),
   verifyOTP: (phone_number: string, otp: string) => api.post('/auth/verify-otp', { phone_number, otp }),
   getMe: () => api.get('/auth/me'),

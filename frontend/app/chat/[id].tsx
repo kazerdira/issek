@@ -27,7 +27,7 @@ import { ImagePickerModal } from '../../src/components/ImagePickerModal';
 import { VoiceRecorder } from '../../src/components/VoiceRecorder';
 import { VoiceMessageBubble } from '../../src/components/VoiceMessageBubble';
 import { uploadVoiceMessage } from '../../src/services/voiceService';
-import { colors } from '../../src/theme/colors';
+import { colors, safeArea } from '../../src/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -824,7 +824,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 8,
-    paddingTop: 8,
+    paddingTop: safeArea.top + 8,
     backgroundColor: colors.primary,
   },
   flatList: {

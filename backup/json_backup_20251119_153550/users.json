@@ -1,0 +1,170 @@
+[
+  {
+    "_id": "690f646d29d3513b7dcb860d",
+    "phone_number": null,
+    "email": "bourezak.farid@gmail.com",
+    "username": "kazer",
+    "display_name": "kaz",
+    "bio": null,
+    "avatar": null,
+    "role": "regular",
+    "hashed_password": "$2b$12$Cg3QOvDJFw/oLzygRyXw0emjw29X93hw/O0hoT8UT2hsdlafyqiIS",
+    "id": "28c9a2b8-9462-4267-818f-0a27b43eeb6f",
+    "created_at": "2025-11-08 15:40:29.251000",
+    "updated_at": "2025-11-08 17:29:18.825000",
+    "is_online": false,
+    "contacts": [],
+    "blocked_users": [],
+    "last_seen": "2025-11-08 17:29:18.825000"
+  },
+  {
+    "_id": "690f6ddb29d3513b7dcb860e",
+    "phone_number": null,
+    "email": "mic@mic.com",
+    "username": "farid",
+    "display_name": "far",
+    "bio": null,
+    "avatar": null,
+    "role": "regular",
+    "hashed_password": "$2b$12$6RrNQlZzPni44yIyffhuDuUu2gHb4cbm9Wby5V0OrpyA61WMraec6",
+    "id": "fe928f23-710c-452e-b3ce-5ae6375bb573",
+    "created_at": "2025-11-08 16:20:43.935000",
+    "updated_at": "2025-11-08 17:29:18.826000",
+    "is_online": false,
+    "contacts": [],
+    "blocked_users": [],
+    "last_seen": "2025-11-08 17:29:18.826000"
+  },
+  {
+    "_id": "690f8bc87c1262e516119fc9",
+    "id": "5dcd5b30-f795-4f86-8bd5-4091463943fd",
+    "username": "alice",
+    "display_name": "Alice Johnson",
+    "phone_number": "+1234567890",
+    "email": "alice@example.com",
+    "hashed_password": "$2b$12$o9NSG.pM69/PTlRuz5Lfeud.j2GGjmWM9JYi.JR6Ca5xQQ9Eaddmy",
+    "bio": "Software developer",
+    "role": "regular",
+    "is_online": false,
+    "contacts": [
+      "168d224d-92ec-420f-9845-a25261d5ea73",
+      "8a92d57e-be26-4223-a4c0-705df072708c"
+    ],
+    "created_at": "2025-11-08 18:28:23.917000",
+    "last_seen": "2025-11-11 09:30:34.229000",
+    "updated_at": "2025-11-11 09:30:34.229000"
+  },
+  {
+    "_id": "690f8bc87c1262e516119fca",
+    "id": "168d224d-92ec-420f-9845-a25261d5ea73",
+    "username": "bob",
+    "display_name": "Bob Smith",
+    "phone_number": "+1234567891",
+    "email": "bob@example.com",
+    "hashed_password": "$2b$12$LIGYFUFYAH02ObvC/ETtbufBG/yD.ARSGHVrk99wjcASZbC/ZWaUy",
+    "bio": "Designer",
+    "role": "regular",
+    "is_online": false,
+    "contacts": [
+      "5dcd5b30-f795-4f86-8bd5-4091463943fd",
+      "24f8948a-cb36-4834-b2a8-8458a1240e21"
+    ],
+    "created_at": "2025-11-08 18:28:24.158000",
+    "last_seen": "2025-11-10 17:55:48.827000",
+    "updated_at": "2025-11-10 17:55:48.827000"
+  },
+  {
+    "_id": "690f8bc87c1262e516119fcb",
+    "id": "8a92d57e-be26-4223-a4c0-705df072708c",
+    "username": "charlie",
+    "display_name": "Charlie Brown",
+    "phone_number": "+1234567892",
+    "email": "charlie@example.com",
+    "hashed_password": "$2b$12$fVuFv0r8y.L28H/P6c0Ys.hgVXnU6VfxbbDTG7I4MooPelckvtgdy",
+    "bio": "Product manager",
+    "role": "regular",
+    "is_online": false,
+    "contacts": [
+      "5dcd5b30-f795-4f86-8bd5-4091463943fd"
+    ],
+    "created_at": "2025-11-08 18:28:24.398000",
+    "last_seen": "2025-11-08 18:28:24.398000"
+  },
+  {
+    "_id": "690f8bc87c1262e516119fcc",
+    "id": "24f8948a-cb36-4834-b2a8-8458a1240e21",
+    "username": "diana",
+    "display_name": "Diana Prince",
+    "phone_number": "+1234567893",
+    "email": "diana@example.com",
+    "hashed_password": "$2b$12$yxSrX9JiWWEDPkdpT5Etgu.HT.iG6xGKGrh6FXZvhX1A71YN/Uk/6",
+    "bio": "Marketing specialist",
+    "role": "regular",
+    "is_online": false,
+    "contacts": [
+      "168d224d-92ec-420f-9845-a25261d5ea73"
+    ],
+    "created_at": "2025-11-08 18:28:24.634000",
+    "last_seen": "2025-11-19 12:29:39.510000",
+    "updated_at": "2025-11-19 12:29:39.510000",
+    "friends": [
+      "1c722f44-2b41-4978-9874-3f4a03b92437"
+    ]
+  },
+  {
+    "_id": "690ff0e7af27e15107858512",
+    "phone_number": null,
+    "email": null,
+    "username": "testuser999",
+    "display_name": "Test User",
+    "bio": null,
+    "avatar": null,
+    "role": "regular",
+    "hashed_password": "$2b$12$FFNEp.p/g29K5NIC30O6..vJYa8ccalBaRLmJwTbx3kZ/xpVUCk3q",
+    "id": "ed443779-db34-49d5-9e8c-b4d99505beed",
+    "created_at": "2025-11-09 01:39:51.648000",
+    "updated_at": "2025-11-09 01:39:51.648000",
+    "is_online": true,
+    "contacts": [],
+    "blocked_users": []
+  },
+  {
+    "_id": "690ff58caf27e15107858513",
+    "phone_number": null,
+    "email": "amel@amel.com",
+    "username": "amel",
+    "display_name": "amel",
+    "bio": null,
+    "avatar": null,
+    "role": "regular",
+    "hashed_password": "$2b$12$Obbyw8OiXRNr1XXsV3XU1uwVn7h.AvZIlxARsyjjHRSE8f2mSnBZW",
+    "id": "72e78d7b-2bfd-4108-a62a-23d9934d6076",
+    "created_at": "2025-11-09 01:59:40.140000",
+    "updated_at": "2025-11-10 11:01:05.462000",
+    "is_online": false,
+    "contacts": [],
+    "blocked_users": [],
+    "last_seen": "2025-11-10 11:01:05.462000"
+  },
+  {
+    "_id": "691dafa925d6bb6476c39642",
+    "phone_number": null,
+    "email": "tester@tester.com",
+    "username": "tester",
+    "display_name": "Tester",
+    "bio": null,
+    "avatar": null,
+    "role": "regular",
+    "hashed_password": "$2b$12$luNGX3u2V6jLm8YJfAPhl.TyMkOyLuBmQ1KNDsQ69nu0LQtB/pPxa",
+    "id": "1c722f44-2b41-4978-9874-3f4a03b92437",
+    "created_at": "2025-11-19 11:53:13.787000",
+    "updated_at": "2025-11-19 14:01:13.618000",
+    "is_online": true,
+    "contacts": [],
+    "blocked_users": [],
+    "last_seen": "2025-11-19 14:01:13.618000",
+    "friends": [
+      "24f8948a-cb36-4834-b2a8-8458a1240e21"
+    ]
+  }
+]

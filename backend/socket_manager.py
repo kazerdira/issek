@@ -229,7 +229,20 @@ class SocketManager:
             from database import get_chat_by_id
             chat = await get_chat_by_id(chat_id)
             if chat:
-                for participant_id in chat['participants']:
+                # Get all participant IDs from members, subscribers, or old participants field
+                participant_ids = set()
+                
+                # Handle new structure (members/subscribers)
+                if 'members' in chat:
+                    participant_ids.update([m['user_id'] for m in chat['members']])
+                if 'subscribers' in chat:
+                    participant_ids.update([s['user_id'] for s in chat['subscribers']])
+                
+                # Handle old structure for backwards compatibility
+                if 'participants' in chat:
+                    participant_ids.update(chat['participants'])
+                
+                for participant_id in participant_ids:
                     if participant_id in self.user_connections:
                         for sid in self.user_connections[participant_id]:
                             # Send to each session of the user
@@ -265,7 +278,20 @@ class SocketManager:
             
             # Notify all participants in those chats
             for chat in chats:
-                for participant_id in chat['participants']:
+                # Get all participant IDs from members, subscribers, or old participants field
+                participant_ids = set()
+                
+                # Handle new structure (members/subscribers)
+                if 'members' in chat:
+                    participant_ids.update([m['user_id'] for m in chat['members']])
+                if 'subscribers' in chat:
+                    participant_ids.update([s['user_id'] for s in chat['subscribers']])
+                
+                # Handle old structure for backwards compatibility
+                if 'participants' in chat:
+                    participant_ids.update(chat['participants'])
+                
+                for participant_id in participant_ids:
                     if participant_id != user_id and participant_id not in notified_users:
                         await self.send_message_to_user(participant_id, 'user_status', {
                             'user_id': user_id,

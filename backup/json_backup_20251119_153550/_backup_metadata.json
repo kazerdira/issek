@@ -1,0 +1,12 @@
+{
+  "timestamp": "20251119_153550",
+  "collections": [
+    "messages",
+    "users",
+    "otps",
+    "friend_requests",
+    "chats"
+  ],
+  "total_collections": 5,
+  "mongo_url": "mongodb://localhost:27017"
+}

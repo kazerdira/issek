@@ -15,7 +15,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useChatStore, Chat } from '../../src/store/chatStore';
 import { chatsAPI } from '../../src/services/api';
 import { Avatar } from '../../src/components/Avatar';
-import { colors } from '../../src/theme/colors';
+import { colors, safeArea } from '../../src/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { useAuthStore } from '../../src/store/authStore';
@@ -237,6 +237,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+    paddingTop: safeArea.top,
   },
   safeAreaTop: {
     backgroundColor: colors.surface,

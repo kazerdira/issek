@@ -3,12 +3,12 @@ from typing import List
 import uuid
 import logging
 
-from models import (
+from models_enhanced import (
     UserResponse, FriendRequestCreate, FriendRequestResponse,
     FriendRequestStatus
 )
 from auth import get_current_user
-from database import (
+from database_enhanced import (
     Database, get_user_by_id, update_user, create_friend_request,
     get_friend_request, get_pending_friend_requests, get_sent_friend_requests,
     get_friend_request_by_id, update_friend_request, create_block, delete_block,

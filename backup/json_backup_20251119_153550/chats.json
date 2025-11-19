@@ -1,0 +1,181 @@
+[
+  {
+    "_id": "690f6df229d3513b7dcb860f",
+    "chat_type": "direct",
+    "name": null,
+    "description": null,
+    "avatar": null,
+    "participants": [
+      "28c9a2b8-9462-4267-818f-0a27b43eeb6f",
+      "fe928f23-710c-452e-b3ce-5ae6375bb573"
+    ],
+    "id": "408dd1d0-9be7-4966-a365-3956e5574376",
+    "created_by": "fe928f23-710c-452e-b3ce-5ae6375bb573",
+    "admins": [
+      "fe928f23-710c-452e-b3ce-5ae6375bb573"
+    ],
+    "created_at": "2025-11-08 16:21:06.189000",
+    "updated_at": "2025-11-08 18:43:51.725000",
+    "pinned_messages": [],
+    "muted_by": [],
+    "last_message": {
+      "content": "Thankyou",
+      "created_at": "2025-11-08 18:43:51.723000",
+      "sender_id": "fe928f23-710c-452e-b3ce-5ae6375bb573",
+      "message_type": "text"
+    }
+  },
+  {
+    "_id": "690f9689266ef3b7446d1463",
+    "chat_type": "direct",
+    "name": null,
+    "description": null,
+    "avatar": null,
+    "participants": [
+      "168d224d-92ec-420f-9845-a25261d5ea73",
+      "5dcd5b30-f795-4f86-8bd5-4091463943fd"
+    ],
+    "id": "03cb8817-9ebe-4ea1-a391-ed86f9641113",
+    "created_by": "5dcd5b30-f795-4f86-8bd5-4091463943fd",
+    "admins": [
+      "5dcd5b30-f795-4f86-8bd5-4091463943fd"
+    ],
+    "created_at": "2025-11-08 19:14:17.978000",
+    "updated_at": "2025-11-10 16:37:02.155000",
+    "pinned_messages": [],
+    "muted_by": [],
+    "last_message": {
+      "content": "",
+      "created_at": "2025-11-10 16:37:02.153000",
+      "sender_id": "168d224d-92ec-420f-9845-a25261d5ea73",
+      "message_type": "image"
+    }
+  },
+  {
+    "_id": "69106ca1af27e15107858514",
+    "chat_type": "direct",
+    "name": null,
+    "description": null,
+    "avatar": null,
+    "participants": [
+      "168d224d-92ec-420f-9845-a25261d5ea73",
+      "72e78d7b-2bfd-4108-a62a-23d9934d6076"
+    ],
+    "id": "aad610cb-61e1-4212-aa59-f349919ad229",
+    "created_by": "72e78d7b-2bfd-4108-a62a-23d9934d6076",
+    "admins": [
+      "72e78d7b-2bfd-4108-a62a-23d9934d6076"
+    ],
+    "created_at": "2025-11-09 10:27:45.439000",
+    "updated_at": "2025-11-10 16:54:20.448000",
+    "pinned_messages": [],
+    "muted_by": [],
+    "last_message": {
+      "content": "Hellow wish you are doing to day i was calling from this morning but you didn't answer wish everything is doing well with you",
+      "created_at": "2025-11-10 16:54:20.447000",
+      "sender_id": "168d224d-92ec-420f-9845-a25261d5ea73",
+      "message_type": "text"
+    }
+  },
+  {
+    "_id": "69106cf2af27e15107858516",
+    "chat_type": "direct",
+    "name": null,
+    "description": null,
+    "avatar": null,
+    "participants": [
+      "5dcd5b30-f795-4f86-8bd5-4091463943fd",
+      "72e78d7b-2bfd-4108-a62a-23d9934d6076"
+    ],
+    "id": "f39a2139-97e6-464d-b60f-35ebd65c5f5e",
+    "created_by": "72e78d7b-2bfd-4108-a62a-23d9934d6076",
+    "admins": [
+      "72e78d7b-2bfd-4108-a62a-23d9934d6076"
+    ],
+    "created_at": "2025-11-09 10:29:06.204000",
+    "updated_at": "2025-11-10 18:48:07.031000",
+    "pinned_messages": [],
+    "muted_by": [],
+    "last_message": {
+      "content": "Good",
+      "created_at": "2025-11-10 18:48:07.030000",
+      "sender_id": "5dcd5b30-f795-4f86-8bd5-4091463943fd",
+      "message_type": "text"
+    }
+  },
+  {
+    "_id": "6911bc889be60e78a689d0f9",
+    "chat_type": "direct",
+    "name": null,
+    "description": null,
+    "avatar": null,
+    "participants": [
+      "5dcd5b30-f795-4f86-8bd5-4091463943fd",
+      "24f8948a-cb36-4834-b2a8-8458a1240e21"
+    ],
+    "id": "68326cad-ecf9-4d9d-87aa-1bfb04e67bfc",
+    "created_by": "24f8948a-cb36-4834-b2a8-8458a1240e21",
+    "admins": [
+      "24f8948a-cb36-4834-b2a8-8458a1240e21"
+    ],
+    "created_at": "2025-11-10 10:20:56.476000",
+    "updated_at": "2025-11-11 11:21:00.100000",
+    "pinned_messages": [],
+    "muted_by": [],
+    "last_message": {
+      "content": "Yes",
+      "created_at": "2025-11-11 11:21:00.098000",
+      "sender_id": "24f8948a-cb36-4834-b2a8-8458a1240e21",
+      "message_type": "text"
+    }
+  },
+  {
+    "_id": "691227051edcd71f618ccc52",
+    "chat_type": "direct",
+    "name": null,
+    "description": null,
+    "avatar": null,
+    "participants": [
+      "24f8948a-cb36-4834-b2a8-8458a1240e21",
+      "168d224d-92ec-420f-9845-a25261d5ea73"
+    ],
+    "id": "5d1fe0e5-8d43-4daf-acb1-393420734bcb",
+    "created_by": "168d224d-92ec-420f-9845-a25261d5ea73",
+    "admins": [
+      "168d224d-92ec-420f-9845-a25261d5ea73"
+    ],
+    "created_at": "2025-11-10 17:55:17.565000",
+    "updated_at": "2025-11-10 17:55:17.566000",
+    "pinned_messages": [],
+    "muted_by": []
+  },
+  {
+    "_id": "691db2b725d6bb6476c39644",
+    "chat_type": "direct",
+    "name": null,
+    "description": null,
+    "avatar": null,
+    "participants": [
+      "1c722f44-2b41-4978-9874-3f4a03b92437",
+      "24f8948a-cb36-4834-b2a8-8458a1240e21"
+    ],
+    "is_public": false,
+    "only_admins_can_post": false,
+    "id": "d5f53acb-d3f2-4fd5-84c8-56b9380cc797",
+    "created_by": "24f8948a-cb36-4834-b2a8-8458a1240e21",
+    "admins": [
+      "24f8948a-cb36-4834-b2a8-8458a1240e21"
+    ],
+    "created_at": "2025-11-19 12:06:15.864000",
+    "updated_at": "2025-11-19 12:06:19.863000",
+    "pinned_messages": [],
+    "muted_by": [],
+    "last_message": {
+      "id": "a09aea7a-36e7-4f5a-aec3-be067aa0dfd8",
+      "content": "Hi",
+      "message_type": "text",
+      "sender_id": "24f8948a-cb36-4834-b2a8-8458a1240e21",
+      "created_at": "2025-11-19 12:06:19.857000"
+    }
+  }
+]

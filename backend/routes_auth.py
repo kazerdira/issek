@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 from server import limiter
 
 @router.post("/register", response_model=Token)
-@limiter.limit("3/minute")  # Limit registration attempts
+@limiter.limit("100/minute")  # Limit registration attempts
 async def register(request: Request, user_data: UserCreate):
     """Register a new user"""
     db = Database.get_db()
@@ -93,7 +93,7 @@ async def register(request: Request, user_data: UserCreate):
     return Token(access_token=access_token, refresh_token=refresh_token, user=user_response)
 
 @router.post("/login", response_model=Token)
-@limiter.limit("5/minute")
+@limiter.limit("100/minute")
 async def login(request: Request, login_data: UserLogin):
     """Login with phone/email and password"""
     if not login_data.phone_number and not login_data.email:
@@ -141,7 +141,7 @@ async def login(request: Request, login_data: UserLogin):
     return Token(access_token=access_token, refresh_token=refresh_token, user=user_response)
 
 @router.post("/request-otp")
-@limiter.limit("3/hour")
+@limiter.limit("20/hour")
 async def request_otp(request: Request, otp_request: OTPRequest):
     """Request OTP for phone number verification"""
     db = Database.get_db()
@@ -177,7 +177,7 @@ async def request_otp(request: Request, otp_request: OTPRequest):
     return response
 
 @router.post("/verify-otp", response_model=Token)
-@limiter.limit("5/minute")  # Limit OTP verification attempts
+@limiter.limit("50/minute")  # Limit OTP verification attempts
 async def verify_otp(request: Request, otp_verify: OTPVerify):
     """Verify OTP and create/login user"""
     db = Database.get_db()
@@ -255,7 +255,7 @@ async def verify_otp(request: Request, otp_verify: OTPVerify):
     return Token(access_token=access_token, refresh_token=refresh_token, user=user_response)
 
 @router.post("/refresh", response_model=Token)
-@limiter.limit("10/minute")
+@limiter.limit("200/minute")
 async def refresh_access_token(request: Request, refresh_request: RefreshTokenRequest):
     """Refresh access token using refresh token"""
     # Validate refresh token

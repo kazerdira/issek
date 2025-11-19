@@ -5,14 +5,14 @@ from datetime import datetime
 import logging
 import secrets
 
-from models import (
+from models_enhanced import (
     ChatCreate, ChatResponse, MessageCreate, MessageResponse,
     MessageType, ChatType, UserResponse, ReactionCreate, ReactionRemove,
     SearchResult, JoinRequest, InviteRequest, UpdatePermissionsRequest,
     BanUserRequest, ChatMember, AdminRights, ChatPermissions
 )
 from auth import get_current_user
-from database import (
+from database_enhanced import (
     Database, get_chat_by_id, get_user_chats, create_chat,
     get_chat_messages, create_message, get_message_by_id,
     update_message, get_user_by_id, get_users_by_ids, search_global,

@@ -8,12 +8,13 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  SafeAreaView,
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { usersAPI, chatsAPI, friendsAPI } from '../../src/services/api';
 import { Avatar } from '../../src/components/Avatar';
-import { colors, spacing, borderRadius, typography, shadows, safeArea } from '../../src/theme/colors';
+import { colors, spacing, borderRadius, typography, shadows, safeArea } from '../../src/theme/theme';
 import { Ionicons } from '@expo/vector-icons';
 
 interface SearchResult {
@@ -323,7 +324,7 @@ export default function ContactsScreen() {
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
@@ -431,7 +432,7 @@ export default function ContactsScreen() {
           )}
         </>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -439,7 +440,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: safeArea.top,
   },
   searchContainer: {
     paddingHorizontal: spacing.lg,

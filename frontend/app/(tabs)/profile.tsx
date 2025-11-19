@@ -11,7 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../src/store/authStore';
 import { Avatar } from '../../src/components/Avatar';
-import { colors } from '../../src/theme/colors';
+import { colors, safeArea } from '../../src/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function ProfileScreen() {
@@ -121,6 +121,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+    paddingTop: safeArea.top,
   },
   safeAreaTop: {
     backgroundColor: colors.primary,

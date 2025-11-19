@@ -31,7 +31,9 @@ async def upload_voice(
             detail="Chat not found"
         )
     
-    if current_user['id'] not in chat['participants']:
+    # Check if user is a member (extract user_id from members array)
+    member_ids = [m.get('user_id') if isinstance(m, dict) else m for m in chat.get('members', [])]
+    if current_user['id'] not in member_ids:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a participant of this chat"

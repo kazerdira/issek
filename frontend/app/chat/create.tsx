@@ -9,12 +9,11 @@ import {
   ActivityIndicator,
   Alert,
   Switch,
-  SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { usersAPI, chatsAPI, friendsAPI } from '../../src/services/api';
 import { Avatar } from '../../src/components/Avatar';
-import { colors } from '../../src/theme/colors';
+import { colors, safeArea } from '../../src/theme/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/authStore';
 
@@ -80,9 +79,8 @@ export default function CreateChatScreen() {
         chat_type: chatType,
         name,
         description,
-        participants: selectedUsers, // Backend adds creator automatically
+        participant_ids: selectedUsers, // Backend adds creator automatically
         is_public: isPublic,
-        only_admins_can_post: chatType === 'channel' ? true : onlyAdminsPost, // Channels usually restricted
       });
       router.replace(`/chat/${response.data.id}`);
     } catch (error: any) {
@@ -116,30 +114,28 @@ export default function CreateChatScreen() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView style={styles.safeAreaTop}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => step === 1 ? router.back() : setStep(1)}>
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => step === 1 ? router.back() : setStep(1)}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>
+          {step === 1 ? 'New Group / Channel' : 'Add Participants'}
+        </Text>
+        {step === 2 && (
+          <TouchableOpacity onPress={handleCreate} disabled={creating}>
+            {creating ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Text style={styles.createButton}>Create</Text>
+            )}
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>
-            {step === 1 ? 'New Group / Channel' : 'Add Participants'}
-          </Text>
-          {step === 2 && (
-            <TouchableOpacity onPress={handleCreate} disabled={creating}>
-              {creating ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Text style={styles.createButton}>Create</Text>
-              )}
-            </TouchableOpacity>
-          )}
-          {step === 1 && (
-            <TouchableOpacity onPress={() => setStep(2)}>
-              <Text style={styles.createButton}>Next</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </SafeAreaView>
+        )}
+        {step === 1 && (
+          <TouchableOpacity onPress={() => setStep(2)}>
+            <Text style={styles.createButton}>Next</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {step === 1 ? (
         <View style={styles.form}>
@@ -226,9 +222,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  safeAreaTop: {
-    backgroundColor: colors.surface,
+    paddingTop: safeArea.top,
   },
   header: {
     flexDirection: 'row',
